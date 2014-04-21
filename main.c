@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <errno.h>
 
 #include "eeprom-manager.h"
 
@@ -11,20 +12,22 @@ int verbosity = 1;
 	if (verbosity) { \
 		printf("WARNING: "); \
 		printf(format, ## args); \
+	} \
 } while(0)
 
 #define ERROR(format,args...) do { \
 	if (verbosity) { \
 		printf("ERROR: "); \
 		printf(format, ## args); \
+	} \
 } while(0)
 
 #define INFO(format,args...) do { \
-if (verbosity) { \
+if (verbosity) \
 	printf(format, ## args); \
-	} while(0)
+} while(0)
 
-void usage()
+void usage(char *name)
 {
 	fprintf(stderr, "Usage: %s [arguments] (operation) [operation arguments]\n"
 	                "Manages JSON-encoded non-volatile data stored in EEPROM(s).\n\n"
@@ -34,6 +37,7 @@ void usage()
 	                "\tset  (key) (value)      - set value to key in EEPROM\n"
 	                "\tclear                   - Erase all data from EEPROM\n"
 	                "\tverify                  - Verify EEPROM integrity\n"
+					"\tinfo                    - Print EEPROM info\n"
 	                "\n"
 	                "Arguments:\n"
 	                "\t-q         - Supress all output except for read value (no output without -r).\n"
@@ -44,7 +48,7 @@ void usage()
 	                "Exit Value\n"
 	                "Exits 0 when a value has been succcessfully written / read to / from EEPROM,\n"
 	                "exits 2 when a key was not present in the EEPROM,\n"
-	                "exits 3 when all EEPROM devices report corrupted SHA256,\n\n", argv[0]);
+	                "exits 3 when all EEPROM devices report corrupted SHA256,\n\n", name);
 	exit(1);
 }
 
@@ -53,11 +57,11 @@ void usage()
  * Sets key to value in EEPROM
  * @return value returned by eeprom_manager_set
  */
-int set(char *key, char *value, int zero, int no_add)
+int set_key(char *key, char *value, int zero, int no_add)
 {
 	int r, err;
 	int flags = (zero ? EEPROM_MANAGER_SET_ZERO : 0) | (no_add ? EEPROM_MANAGER_SET_NO_CREATE : 0);
-	r = eeprom_manager_set_value(key, value, strlen(value), flags);
+	r = eeprom_manager_set_value(key, value, flags);
 	err = errno;
 	if (!r)
 		ERROR("Failed to set value in EEPROM: %s\n", strerror(err));
@@ -71,7 +75,7 @@ int set(char *key, char *value, int zero, int no_add)
  * Reads key from EEPROM
  * @return value returned by eeprom_manager_read
  */
-int read(char *key)
+int read_key(char *key)
 {
 	int r, err;
 	char value[EEPROM_MANAGER_MAX_VALUE_LENGTH];
@@ -128,10 +132,41 @@ int verify()
 			ERROR("Failed to check EEPROM: %s\n", strerror(err));
 			break;
 		default:
-			ERROR("Unknown eeprom-manager error: %s\n", err);
+			ERROR("Unknown eeprom-manager error: %d\n", err);
 			break;
 	}
 	return r;
+}
+
+
+/** 
+ * Prints infomration about the EEPROMs
+ */
+int info()
+{
+	// Should print info about configured EEPROMS:
+	// 01: 512K EEPROM at /sys/bus/... using blocksize 256
+	// 02: 512K EEPROM at /sys/bus/... using blocksize 256
+	
+	// Then stats about storing data inside:
+	// Currently using 4532 of 512000 Bytes (0.08%)
+	
+	unsigned int i = 0;
+	struct eeprom *eeprom_list_start = eeprom_manager_info();
+	struct eeprom *current_eeprom = NULL;
+	
+	if (eeprom_list_start == NULL)
+	{
+		ERROR("Failed to get EEPROM info.\n");
+		return -1;
+	}
+	
+	INFO("Defined EEPROM devices. All sizes are in Bytes.\n");
+	INFO("%4s\t%10s\t%5s\t%5s\t%" EEPROM_MANAGER_STR(EEPROM_MANGAER_PATH_MAX_LENGTH) "s\n", "#", "Size", "BS", "Count", "Path");
+	for (current_eeprom = eeprom_list_start; current_eeprom != NULL; current_eeprom = current_eeprom->next)
+		printf("%4u\t%10d\t%5d\t%5d\t%" EEPROM_MANAGER_STR(EEPROM_MANGAER_PATH_MAX_LENGTH) "s\n", ++i, (current_eeprom->bs * current_eeprom->count), current_eeprom->bs, current_eeprom->count, current_eeprom->path);
+	
+	return 0;
 }
 
 
@@ -143,9 +178,12 @@ int verify()
  */
 int main(int argc, char **argv)
 {
-	int zero = 0, no_add = 0, eeprom_manager_verbosity = 1;
+	int r, c, zero = 0, no_add = 0, eeprom_manager_verbosity = 1;
 	
-	while ((c = getopt (argc, argv, "qznv")) != -1)
+	if (argc < 2)
+		usage(argv[0]);
+	
+	while ((c = getopt (argc, argv, "qznvh")) != -1)
 	{
 		switch (c)
 		{
@@ -161,13 +199,22 @@ int main(int argc, char **argv)
 			case 'n':
 				no_add = 1;
 				break;
+			case 'h':
 			default:
-				usage();
+				usage(argv[0]);
 		}
 	}
 	
-	if (strcmp(argv[optind], "set") == 0)
-		return set(argv[optind + 1], argv[optind + 2], zero, no_add);
+	if (eeprom_manager_initialize() != 0)
+	{
+		int err = errno;
+		ERROR("Failed to initialize EEPROM Manager: %s.\n", strerror(errno));
+		if (err == ENOENT)
+			ERROR("Could not open config file at %s\n", EEPROM_MANAGER_CONF_PATH);
+		r = -1;
+	}
+	else if (strcmp(argv[optind], "set") == 0)
+		r = set_key(argv[optind + 1], argv[optind + 2], zero, no_add);
 	else
 	{
 		if (zero)
@@ -175,18 +222,23 @@ int main(int argc, char **argv)
 		if (no_add)
 			WARN("Ignoring argument -n\n");
 		
+		// TODO: If there isn't any arguments for read, consider printing everything in key = value list
+		//       This would allow for easy fast export to bash variables
 		if (strcmp(argv[optind], "read") == 0)
-			return read(argv[optind + 1]);
+			r = read_key(argv[optind + 1]);
 		else if (strcmp(argv[optind], "clear") == 0)
-			return clear();
-		else if (strcmp(argv[optind], "clear") == 0)
-			return verify();
+			r = clear();
+		else if (strcmp(argv[optind], "verify") == 0)
+			r = verify();
+		else if (strcmp(argv[optind], "info") == 0)
+			r = info();
 		else
 		{
 			ERROR("Unrecognized operation %s\n\n", argv[optind]);
-			usage();
+			usage(argv[0]);
 		}
 	}
 	
-	return 0;
+	eeprom_manager_cleanup();
+	return r;
 }

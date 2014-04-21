@@ -1,15 +1,57 @@
 #ifndef _EEPROM_MANAGER_H
 #define _EEPROM_MANAGER_H
 
-#define EEPROM_MANAGER_MAX_KEY_LENGTH 100
-#define EEPROM_MANAGER_MAX_KEY_LENGTH 300
-#define EEPROM_PATH_MAX_LENGTH 100
-#define MAX_RW_ATTEMPTS 100
-#define EEPROM_MANAGER_CONF_PATH "/etc/eeprom-manager.conf"
+#include <openssl/sha.h>
 
+#define EEPROM_MANAGER_STR(s)            EEPROM_MANAGER_XSTR(s)
+#define EEPROM_MANAGER_XSTR(s)           #s
+#define EEPROM_MANAGER_MAX_KEY_LENGTH    (100)
+#define EEPROM_MANAGER_MAX_VALUE_LENGTH  (300)
+#define EEPROM_MANGAER_PATH_MAX_LENGTH   (100)
+#define MAX_RW_ATTEMPTS                  (100)
+#define SHA_STRING_LENGTH                (SHA256_DIGEST_LENGTH * 2 + 1)
+#define WC_STRING_LENGTH                 (10 + 1)
+#define EEPROM_MANAGER_CONF_PATH         "/etc/eeprom-manager.conf"
 
 #define EEPROM_MANAGER_SET_NO_CREATE (1 << 0)
 #define EEPROM_MANAGER_SET_ZERO      (1 << 1)
+
+/**
+ * EEPROM metadata structure
+ * 
+ * There is one of these for each EEPROM device specified in the
+ * config file in a linked list starting at first_eeprom and ending at last_eeprom.
+ */
+struct eeprom {
+	char path[EEPROM_MANGAER_PATH_MAX_LENGTH];     /**< Path to the EEPROM device */
+	size_t bs;                                     /**< Block size to write (specified by EEPROM driver) */
+	size_t count;                                  /**< Number of blocks that can be written */
+	int fd;                                        /**< File descriptor number for the opened file (0 if closed) */
+	char sha256[SHA_STRING_LENGTH];                /**< SHA256 for data on device. */
+	unsigned int wc;                               /**< Device write count. */
+	
+	struct eeprom *next;                           /**< Next eeprom in the list. NULL if last item. */
+};
+
+
+/**
+ * Initializes EEPROM Manager
+ * 
+ * Loads the config file and parses its contents, building up the
+ * metadata necessary to work correctly.
+ * 
+ * @return 0 on success, -1 on error
+ */
+int eeprom_manager_initialize();
+
+
+/**
+ * Cleans up EEPROM Manager
+ * 
+ * Frees up data structures allocated during initialization
+ */
+void eeprom_manager_cleanup();
+
 
 /**
  * Set EEPROM Manager verbosity
@@ -79,5 +121,13 @@ int eeprom_manager_clear();
  *        -1 on error (check errno)
  */
 int eeprom_manager_verify();
+
+
+/**
+ * Returns information about the loaded EEPROM devices
+ * 
+ * @return head of a linked list of loaded EEPROM data or NULL on error.
+ */
+struct eeprom * eeprom_manager_info();
 
 #endif

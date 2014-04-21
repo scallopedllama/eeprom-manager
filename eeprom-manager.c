@@ -10,24 +10,9 @@
 
 #include "eeprom-manager.h"
 
-int verbosity = 0;
-
-/**
- * EEPROM metadata structure
- * 
- * There is one of these for each EEPROM device specified in the
- * config file in a linked list starting at first_eeprom and ending at last_eeprom.
- */
-struct eeprom {
-	char path[EEPROM_PATH_MAX_LENGTH];     /**< Path to the EEPROM device */
-	size_t bs;                             /**< Block size to write (specified by EEPROM driver) */
-	size_t count;                          /**< Number of blocks that can be written */
-	int fd;                                /**< File descriptor number for the opened file (0 if closed) */
-	struct eeprom *next;                   /**< Next eeprom in the list */
-};
+int eeprom_manager_verbosity = 0;
 struct eeprom *first_eeprom = NULL;
 struct eeprom *last_eeprom = NULL;
-
 
 /**
  * Safely Clears the eeproms linked list
@@ -35,7 +20,7 @@ struct eeprom *last_eeprom = NULL;
 void clear_eeprom_metadata()
 {
 	struct eeprom *current_eeprom = first_eeprom;
-	while (current_eeprom->next != NULL)
+	while (current_eeprom != NULL)
 	{
 		struct eeprom *prev_eeprom = current_eeprom;
 		current_eeprom = current_eeprom->next;
@@ -56,6 +41,27 @@ void push_eeprom_metadata(struct eeprom *new_eeprom)
 	else
 		last_eeprom->next = new_eeprom;
 }
+
+
+/**
+ * Calculates a sha256 checksum for a string
+ * 
+ * Provided a string buffer, calculates the sha256 sum
+ * then stores the resultant sha256 sum as a string in
+ * the passed variable.
+ * 
+ * @param data_buffer Text to checksum
+ * @param sha256      Buffer to fill with checksum. Must be SHA_STRING_LENGTH in length.
+ */
+void get_sha256_string(char *data_buffer, char *sha256)
+{
+	unsigned char sha256_data[SHA256_DIGEST_LENGTH];
+	int i;
+	SHA256((unsigned char*)&data_buffer, strlen(data_buffer), sha256_data);
+	for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
+		sprintf(sha256 + (i * 2), "%02x", sha256_data[i]);
+}
+
 
 /**
  * Clears bytes after the NULL byte
@@ -84,121 +90,205 @@ int clear_after_null(char *buf, int length)
 
 
 /**
+ * Write wrapper
+ * 
+ * Attempts to write the data to the fd a maximum MAX_RW_ATTEMPTS
+ * and drops a warning if it does not manage to do that.
+ * 
+ * @param fd    File descriptor to write to
+ * @param buf   Buffer to write from
+ * @param count Number of bytes to write from buf to fd
+ */
+size_t read_write_all(char op, struct eeprom *device, void *buf, size_t count)
+{
+	size_t r = 0;
+	unsigned int attempts = 0;
+	
+	if (op != 'r' && op != 'w')
+		return -EINVAL;
+	
+	// Read and write may return less than count so keep trying until that much is read or written.
+	if (op == 'w')
+		while (((r += write(device->fd, buf, count)) < count) && (attempts++ < MAX_RW_ATTEMPTS));
+	else
+		while (((r += read(device->fd, buf, count)) < count) && (attempts++ < MAX_RW_ATTEMPTS));
+	
+	// Make sure it was all read or written
+	if (attempts >= MAX_RW_ATTEMPTS)
+	{
+		fprintf(stderr, "ERROR: Attempted %d times to %s %d bytes\n", MAX_RW_ATTEMPTS, (op == 'r' ? "read" : "write"), count);
+		fprintf(stderr, "       but only managed to %s %d bytes. Aborting.\n", (op == 'r' ? "read" : "write"), r);
+		return -EIO;
+	}
+	
+	return r;
+}
+
+
+/**
+ * Reads or Writes Metadata for passed EEPROM device
+ * 
+ * Either loads the sha256 and wc from the EEPROM into the passed
+ * eeprom struct or saves the sha256 and wc from the eeprom struct
+ * into the EEPROM device.
+ * When writing, the sha256 and wc variables must be set inside
+ * the eeprom struct before calling this function.
+ * 
+ * @param op     'r' or 'w' to Read or Write respectively
+ * @param device EEPROM device to load metadata for
+ * @return -1 on failure, 0 on success
+ */
+int read_write_eeprom_metadata(char op, struct eeprom *device)
+{
+	char wc_buffer[WC_STRING_LENGTH];
+	int r = 0;
+	// Read the device->sha256 and device->wc at the end of the device
+	lseek(device->fd, -1 * device->bs, SEEK_END);
+	
+	// Read the SHA
+	r = read_write_all(op, device, device->sha256, SHA_STRING_LENGTH);
+	if (r == 0)
+	{
+		if (op == 'w')
+			sprintf(wc_buffer, "%010u", device->wc);
+		
+		r = read_write_all(op, device, wc_buffer, WC_STRING_LENGTH);
+		
+		if (op == 'r')
+			sscanf(wc_buffer, "%010u", &(device->wc));
+	}
+	
+	return r;
+}
+
+/**
  * Reads or Writes the EEPROM contents
  * 
  * Either reads from the already-open fd writing into string or writes from the
  * string into the fd in bs chunks a maximum of count times, stopping after the
  * first null byte is encountered.
  * 
- * Also reads or writes the sha256 from the end of the device to / from the sha string.
+ * Also reads or writes the sha256 and write count from the end of the device.
  * Returns -EIO if it fails while trying to read or write the EEPROM.
  * Returns -EINVAL if op was not 'r' or 'w'.
  * 
  * @param op     'r' or 'w' to Read or Write respectively
- * @param fd     Opened EEPROM file
+ * @param device Loaded EEPROM structure with updated sha256 and wc variables
  * @param buf    String into which the contents should be written. sizeof must be at least (bs * (count - 1) + 1)
- * @param sha    Buffer into which the sha read from the end of the device is written. sizeof must be at least SHA256_DIGEST_LENGTH
- * @param bs     Block size to read
- * @param count  Number of blocks in whole EEPROM device
  * @return < 0 to indicate failure, else length of the JSON string read
  */
-size_t read_write_eeprom(char op, int fd, char *buf, unsigned char *sha, size_t bs, size_t count)
+size_t read_write_eeprom(char op, struct eeprom *device, char *buf)
 {
-	int i, j, retval, r, attempts, null_found;
+	int i, retval, r, null_found;
 	char *pos = buf;
 	
 	if (op != 'r' && op != 'w')
 		return -EINVAL;
 	
-	// Start at the beginning of the device
-	lseek(fd, 0, SEEK_SET);
-	
 	// Clear the buffer if reading
 	if (op == 'r')
-		memset(buf, 0, (bs * count) + 1);
-	
-	// Read / write count blocks
-	for (i = 0; i < count; i++)
+		memset(buf, 0, (device->bs * device->count) + 1);
+	// Clear the last block if writing
+	if (op == 'w')
 	{
-		// Do a whole block
-		j = 0;
-		r = 0;
+		char zero_block[device->bs];
+		memset(zero_block, 0, device->bs);
+		lseek(device->fd, -1 * device->bs, SEEK_END);
+		// TODO: Check for errors
+		r = read_write_all('w', device, zero_block, device->bs);
+	}
+	
+	// Start at the beginning of the device
+	lseek(device->fd, 0, SEEK_SET);
+	
+	// Read / write device->count blocks
+	for (i = 0; i < device->count; i++)
+	{
 		null_found = 0;
-		attempts = 0;
 		
 		// Clear bytes after null if writing here
 		if (op == 'w')
-			null_found = clear_after_null(pos, bs);
+			null_found = clear_after_null(pos, device->bs);
 		
 		// Do read or write
-		if (op == 'r')
-			while (((r += read(fd, pos + r, bs - r)) < bs) && (attempts++ < MAX_RW_ATTEMPTS));
-		else
-			while (((r += write(fd, pos + r, bs - r)) < bs) && (attempts++ < MAX_RW_ATTEMPTS));
-		
-		// Make sure it was all read or written
-		if (attempts >= MAX_RW_ATTEMPTS)
-		{
-			fprintf(stderr, "ERROR: Attempted %d times to %s %d bytes at offset %d\n", MAX_RW_ATTEMPTS, (op == 'r' ? "read" : "write"), bs, i);
-			fprintf(stderr, "       but only managed to %s %d bytes. Aborting.\n", (op == 'r' ? "read" : "write"), r);
-			return -EIO;
-		}
+		// TODO: Check for errors
+		r = read_write_all(op, device, pos, device->bs);
 		
 		// If reading, clear bytes after null here
 		if (op == 'r')
-			null_found = clear_after_null(pos, bs);
+			null_found = clear_after_null(pos, device->bs);
 		
 		// Done if there was a null
 		if (null_found)
 			break;
 		
 		// Advance the position in the buffer
-		pos += bs;
+		pos += device->bs;
 	}
 	
 	// Calculate return value
 	if (null_found)
-		retval = (i * bs) + j + 1;
+		retval = (i * device->bs) + null_found + 1;
 	else
-		retval = (count * bs) + 1;
+		retval = (device->count * device->bs) + 1;
 	
-	// Read / write the sha from the end of the device
-	r = 0;
-	attempts = 0;
-	if (op == 'r')
-		while (((r += read((fd + bs * (count - 1)), sha, SHA256_DIGEST_LENGTH - r)) < SHA256_DIGEST_LENGTH) && (attempts++ < MAX_RW_ATTEMPTS));
-	else
-		while (((r += write((fd + bs * (count - 1)), sha, SHA256_DIGEST_LENGTH - r)) < SHA256_DIGEST_LENGTH) && (attempts++ < MAX_RW_ATTEMPTS));
-		
-	// Make sure it was all read
-	if (attempts >= MAX_RW_ATTEMPTS)
-	{
-		fprintf(stderr, "ERROR: Attempted %d times to %s %d bytes at offset %d\n", MAX_RW_ATTEMPTS, (op == 'r' ? "read" : "write"), SHA256_DIGEST_LENGTH, bs * (count - 1)));
-		fprintf(stderr, "       but only managed to %s %d bytes. Aborting.\n", (op == 'r' ? "read" : "write"), r);
-		return -EIO;
-	}
+	// Read / write the device->sha256 and device->wc at the end of the device
+	read_write_eeprom_metadata(op, device);
 	
 	return retval;
 }
 
-int write_eeprom(int fd, char *buf, size_t bs, size_t count)
+
+/**
+ * Writes data to EEPROM
+ * 
+ * Takes the provided buffer, calculates its sha256 value
+ * then writes that data to the provided eeprom device.
+ * 
+ * @param device EEPROM device to write to
+ * @param buf    String data to write to EEPROM
+ */
+int write_eeprom(struct eeprom *device, char *buf)
 {
 	// Calculate sha256
-	unsigned char sha256[SHA256_DIGEST_LENGTH];
-	SHA256((unsigned char*)&buf, strlen(buf), &sha256);
+	char sha256[SHA_STRING_LENGTH];
+	get_sha256_string(buf, sha256);
 	
-	//TODO: Also write the GMT Unix timestamp after the sha to keep track of
-	//      most up-to-date value
-	read_write_eeprom('w', fd, buf, sha256, bs, count);
+	// Don't write anything if the SHA hasn't changed
+	if (strcmp(device->sha256, sha256) == 0)
+		return 0;
+	
+	// Write data
+	device->wc++;
+	return read_write_eeprom('w', device, buf);
 }
 
-int verify_eeprom(int fd, char *buf, size_t bs, size_t count)
+
+/**
+ * Reads the contents of the eeprom and verifies the sha256 sum,
+ * returing the write count on success.
+ * 
+ * @param device EEPROM device to verify
+ * @return -1 on non-match, write count on success
+ */
+int verify_eeprom(struct eeprom *device)
 {
+	char data_buffer[device->bs * device->count + 1];
+	char sha256[SHA_STRING_LENGTH];
 	
+	int r = read_write_eeprom('r', device, data_buffer);
+	if (r < 0)
+		return r;
+	get_sha256_string(data_buffer, sha256);
+	
+	if (strcmp(sha256, device->sha256) != 0)
+		return -1;
+	return device->wc;
 }
 
 // TODO: ALL THESE API CALLS AND SUCH MUST BE PROTECTED BY A SEMAPHORE TO BE THREAD SAFE!!
-
+// TODO: Needs check to make sure all data fits in eeprom
+// TODO: Add a level of caching to all this, need a function that checks the last block on all devices and uses previous json state if wc hasn't changed.
 
 /**
  * Opens all EEPROM files
@@ -226,6 +316,7 @@ int open_eeproms()
 			return -1;
 		}
 	}
+	return 0;
 }
 
 
@@ -255,31 +346,35 @@ int close_eeproms()
 		// Close the file
 		close(current_eeprom->fd);
 	}
+	return 0;
 }
 
 
-/**
- * Initializes EEPROM Manager
- * 
- * Loads the config file and parses its contents, building up the
- * metadata necessary to work correctly.
- * 
- * @return 0 on success, -1 on error
+
+/*
+ *  API Function Definitions
  */
-int initialize()
+
+
+int eeprom_manager_initialize()
 {
 	static int initialized = 0;
 	FILE *config = NULL;
+	size_t last_bs = 0, last_count = 0;
 	
 	// Don't do anything if already initialized
 	if (initialized) return 0;
 	
-	// Parse config file
+	// Load config file
 	config = fopen(EEPROM_MANAGER_CONF_PATH, "r");
-	while(true)
+	if (config == NULL)
+		return -1;
+	
+	// Parse config file
+	while(!feof(config))
 	{
 		struct eeprom *new_eeprom = NULL;
-		char path[EEPROM_PATH_MAX_LENGTH];
+		char path[EEPROM_MANGAER_PATH_MAX_LENGTH];
 		int bs;
 		int size;
 		
@@ -290,17 +385,32 @@ int initialize()
 			continue;
 		}
 		
-		fscanf(config, "%s %d %d\n", path, bs, size);
+		fscanf(config, "%s %d %d\n", path, &bs, &size);
 		new_eeprom = malloc(sizeof(struct eeprom));
 		if (new_eeprom == NULL)
 		{
 			fprintf(stderr, "ERROR: Cannot allocate memory for EEPROM metadata.\n");
-			return -ENOMEM;
+			errno = ENOMEM;
+			return -1;
 		}
 		
-		strncpy(new_eeprom->path, path, EEPROM_PATH_MAX_LENGTH);
+		// TODO: Best way to check for this?
+		if (bs < (SHA_STRING_LENGTH + WC_STRING_LENGTH))
+		{
+			fprintf(stderr, "ERROR: bs is too small to store SHA and write count in last block. Skipping...\n");
+			continue;
+		}
+		
+		// Load up structure
+		strncpy(new_eeprom->path, path, EEPROM_MANGAER_PATH_MAX_LENGTH);
 		new_eeprom->bs = bs;
 		new_eeprom->count = (size / bs);
+		
+		// Warn if all EEPROMs are not the same size
+		if (last_bs == 0) last_bs = bs;
+		if (last_count == 0) last_count = new_eeprom->count;
+		if (last_bs != bs || last_count != new_eeprom->count)
+			fprintf(stderr, "WARNING: EEPROM at path %s does not appear to be the same size as other devices. May have unexpected behavior.\n", path);
 		
 		push_eeprom_metadata(new_eeprom);
 	}
@@ -308,14 +418,19 @@ int initialize()
 	fclose(config);
 	
 	initialized = 1;
+	return 0;
 }
 
-/*
- *  API Function Definitions
- */
+
+void eeprom_manager_cleanup()
+{
+	clear_eeprom_metadata();
+}
+
+
 void eeprom_manager_set_verbosity(int level)
 {
-	verbosity = level;
+	   eeprom_manager_verbosity = level;
 }
 
 int eeprom_manager_set_value(char *key, char *value, int flags)
@@ -337,3 +452,9 @@ int eeprom_manager_verify()
 {
 	
 }
+
+struct eeprom *eeprom_manager_info()
+{
+	return first_eeprom;
+}
+
