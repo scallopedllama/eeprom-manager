@@ -99,7 +99,7 @@ int clear_after_null(char *buf, int length)
  * @param buf   Buffer to write from
  * @param count Number of bytes to write from buf to fd
  */
-size_t read_write_all(char op, struct eeprom *device, void *buf, size_t count)
+size_t read_write_all(struct eeprom *device, char op, void *buf, size_t count)
 {
 	size_t r = 0;
 	unsigned int attempts = 0;
@@ -109,14 +109,14 @@ size_t read_write_all(char op, struct eeprom *device, void *buf, size_t count)
 	
 	// Read and write may return less than count so keep trying until that much is read or written.
 	if (op == 'w')
-		while (((r += write(device->fd, buf, count)) < count) && (attempts++ < MAX_RW_ATTEMPTS));
+		while (((r += write(device->fd, buf, count)) < count) && (attempts++ < EEPROM_MANAGER_MAX_RW_ATTEMPTS));
 	else
-		while (((r += read(device->fd, buf, count)) < count) && (attempts++ < MAX_RW_ATTEMPTS));
+		while (((r += read(device->fd, buf, count)) < count) && (attempts++ < EEPROM_MANAGER_MAX_RW_ATTEMPTS));
 	
 	// Make sure it was all read or written
-	if (attempts >= MAX_RW_ATTEMPTS)
+	if (attempts >= EEPROM_MANAGER_MAX_RW_ATTEMPTS)
 	{
-		fprintf(stderr, "ERROR: Attempted %d times to %s %d bytes\n", MAX_RW_ATTEMPTS, (op == 'r' ? "read" : "write"), count);
+		fprintf(stderr, "ERROR: Attempted %d times to %s %d bytes\n", EEPROM_MANAGER_MAX_RW_ATTEMPTS, (op == 'r' ? "read" : "write"), count);
 		fprintf(stderr, "       but only managed to %s %d bytes. Aborting.\n", (op == 'r' ? "read" : "write"), r);
 		return -EIO;
 	}
@@ -134,28 +134,35 @@ size_t read_write_all(char op, struct eeprom *device, void *buf, size_t count)
  * When writing, the sha256 and wc variables must be set inside
  * the eeprom struct before calling this function.
  * 
+ * If the EEPROM device appears to be uninitialized, it will return -EMEDIUMTYPE.
+ * 
  * @param op     'r' or 'w' to Read or Write respectively
  * @param device EEPROM device to load metadata for
  * @return -1 on failure, 0 on success
  */
-int read_write_eeprom_metadata(char op, struct eeprom *device)
+int read_write_eeprom_metadata(struct eeprom *device, char op)
 {
-	char wc_buffer[WC_STRING_LENGTH];
+	char buffer[EEPROM_MANAGER_WC_STRING_LENGTH];
 	int r = 0;
 	// Read the device->sha256 and device->wc at the end of the device
 	lseek(device->fd, -1 * device->bs, SEEK_END);
 	
+	// Read the Magic
+	r = read_write_all(device, 'r', buffer, strlen(EEPROM_MANAGER_MAGIC));
+	if (strcmp(buffer, EEPROM_MANAGER_MAGIC) != 0)
+		return -EMEDIUMTYPE;
+	
 	// Read the SHA
-	r = read_write_all(op, device, device->sha256, SHA_STRING_LENGTH);
+	r = read_write_all(device, op, device->sha256, EEPROM_MANAGER_SHA_STRING_LENGTH);
 	if (r == 0)
 	{
 		if (op == 'w')
-			sprintf(wc_buffer, "%010u", device->wc);
+			sprintf(buffer, "%010u", device->wc);
 		
-		r = read_write_all(op, device, wc_buffer, WC_STRING_LENGTH);
+		r = read_write_all(device, op, buffer, EEPROM_MANAGER_WC_STRING_LENGTH);
 		
 		if (op == 'r')
-			sscanf(wc_buffer, "%010u", &(device->wc));
+			sscanf(buffer, "%010u", &(device->wc));
 	}
 	
 	return r;
@@ -177,7 +184,7 @@ int read_write_eeprom_metadata(char op, struct eeprom *device)
  * @param buf    String into which the contents should be written. sizeof must be at least (bs * (count - 1) + 1)
  * @return < 0 to indicate failure, else length of the JSON string read
  */
-size_t read_write_eeprom(char op, struct eeprom *device, char *buf)
+size_t read_write_eeprom(struct eeprom *device, char op, char *buf)
 {
 	int i, retval, r, null_found;
 	char *pos = buf;
@@ -195,7 +202,7 @@ size_t read_write_eeprom(char op, struct eeprom *device, char *buf)
 		memset(zero_block, 0, device->bs);
 		lseek(device->fd, -1 * device->bs, SEEK_END);
 		// TODO: Check for errors
-		r = read_write_all('w', device, zero_block, device->bs);
+		r = read_write_all(device, 'w', zero_block, device->bs);
 	}
 	
 	// Start at the beginning of the device
@@ -212,7 +219,7 @@ size_t read_write_eeprom(char op, struct eeprom *device, char *buf)
 		
 		// Do read or write
 		// TODO: Check for errors
-		r = read_write_all(op, device, pos, device->bs);
+		r = read_write_all(device, op, pos, device->bs);
 		
 		// If reading, clear bytes after null here
 		if (op == 'r')
@@ -233,7 +240,7 @@ size_t read_write_eeprom(char op, struct eeprom *device, char *buf)
 		retval = (device->count * device->bs) + 1;
 	
 	// Read / write the device->sha256 and device->wc at the end of the device
-	read_write_eeprom_metadata(op, device);
+	read_write_eeprom_metadata(device, op);
 	
 	return retval;
 }
@@ -251,7 +258,7 @@ size_t read_write_eeprom(char op, struct eeprom *device, char *buf)
 int write_eeprom(struct eeprom *device, char *buf)
 {
 	// Calculate sha256
-	char sha256[SHA_STRING_LENGTH];
+	char sha256[EEPROM_MANAGER_SHA_STRING_LENGTH];
 	get_sha256_string(buf, sha256);
 	
 	// Don't write anything if the SHA hasn't changed
@@ -260,7 +267,7 @@ int write_eeprom(struct eeprom *device, char *buf)
 	
 	// Write data
 	device->wc++;
-	return read_write_eeprom('w', device, buf);
+	return read_write_eeprom(device, 'w', buf);
 }
 
 
@@ -274,9 +281,9 @@ int write_eeprom(struct eeprom *device, char *buf)
 int verify_eeprom(struct eeprom *device)
 {
 	char data_buffer[device->bs * device->count + 1];
-	char sha256[SHA_STRING_LENGTH];
+	char sha256[EEPROM_MANAGER_SHA_STRING_LENGTH];
 	
-	int r = read_write_eeprom('r', device, data_buffer);
+	int r = read_write_eeprom(device, 'r', data_buffer);
 	if (r < 0)
 		return r;
 	get_sha256_string(data_buffer, sha256);
@@ -350,20 +357,10 @@ int close_eeproms()
 }
 
 
-
-/*
- *  API Function Definitions
- */
-
-
-int eeprom_manager_initialize()
+int load_conf_data()
 {
-	static int initialized = 0;
 	FILE *config = NULL;
 	size_t last_bs = 0, last_count = 0;
-	
-	// Don't do anything if already initialized
-	if (initialized) return 0;
 	
 	// Load config file
 	config = fopen(EEPROM_MANAGER_CONF_PATH, "r");
@@ -374,7 +371,7 @@ int eeprom_manager_initialize()
 	while(!feof(config))
 	{
 		struct eeprom *new_eeprom = NULL;
-		char path[EEPROM_MANGAER_PATH_MAX_LENGTH];
+		char path[EEPROM_MANAGER_PATH_MAX_LENGTH];
 		int bs;
 		int size;
 		
@@ -395,14 +392,14 @@ int eeprom_manager_initialize()
 		}
 		
 		// TODO: Best way to check for this?
-		if (bs < (SHA_STRING_LENGTH + WC_STRING_LENGTH))
+		if (bs < EEPROM_MANAGER_METADATA_LENGTH)
 		{
 			fprintf(stderr, "ERROR: bs is too small to store SHA and write count in last block. Skipping...\n");
 			continue;
 		}
 		
 		// Load up structure
-		strncpy(new_eeprom->path, path, EEPROM_MANGAER_PATH_MAX_LENGTH);
+		strncpy(new_eeprom->path, path, EEPROM_MANAGER_PATH_MAX_LENGTH);
 		new_eeprom->bs = bs;
 		new_eeprom->count = (size / bs);
 		
@@ -416,6 +413,31 @@ int eeprom_manager_initialize()
 	}
 	
 	fclose(config);
+}
+
+
+/*
+ *  API Function Definitions
+ */
+
+
+int eeprom_manager_initialize()
+{
+	static int initialized = 0;
+	
+	// Don't do anything if already initialized
+	if (initialized) return 0;
+	
+	// Load the data from the configuration file
+	if (load_conf_data() < 0)
+		return -1;
+	
+	// Load up all meta-data
+	struct eeprom *d = NULL;
+	int max_wc = -1;
+	for (d = first_eeprom; d != NULL; d = d->next)
+		read_write_eeprom_metadata(d, 'r');
+	
 	
 	initialized = 1;
 	return 0;
