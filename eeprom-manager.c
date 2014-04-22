@@ -15,6 +15,8 @@
 // TODO: Needs check to make sure all data fits in eeprom
 // TODO: Add a level of caching to all this, need a function that checks the last block on all devices and uses previous json state if wc hasn't changed.
 // TODO: Need mechanism to remove misbehaving eeprom from pool if it's failing to write and such
+// TODO: Check all functions for situations where bad input could cause segfault and handle it.
+// TODO: Add check for EEPROM write roll-over
 
 int eeprom_manager_verbosity = 0;
 size_t eeprom_data_size = 0;
@@ -287,7 +289,7 @@ size_t read_write_eeprom(struct eeprom *device, char op)
  * then writes that data to the provided eeprom device.
  * 
  * @param device EEPROM device to write to
- * @return < 1 on error, number of bytes written on success (can be 0, not error)
+ * @return < 0 on error, number of bytes written on success (can be 0, not error)
  */
 int write_eeprom(struct eeprom *device)
 {
@@ -305,6 +307,27 @@ int write_eeprom(struct eeprom *device)
 	// Write data
 	device->wc++;
 	return read_write_eeprom(device, 'w');
+}
+
+/**
+ * Writes all eeprom data to eeproms from the list.
+ * 
+ * Iterates through the eeprom list, calling write_eeprom on each.
+ * 
+ * @return < 0 on error, total number of bytes written on success (can be 0, not error)
+ */
+int write_all_eeproms()
+{
+	struct eeprom *d;
+	int r, t = 0;
+	for (d = first_eeprom; d != NULL; d = d->next)
+	{
+		r = write_eeprom(d);
+		if (r < 0)
+			return r;
+		t += r;
+	}
+	return t;
 }
 
 
@@ -395,6 +418,14 @@ int close_eeproms()
 }
 
 
+/**
+ * Loads eeprom configuration data
+ * 
+ * Reads the EEPROM Manager configuration file and loads up a linked list
+ * of eeprom device metadata.
+ * 
+ * @return < 0 on error, 0 on success
+ */
 int load_conf_data()
 {
 	FILE *config = NULL;
@@ -531,6 +562,9 @@ int repair_all_eeproms(struct eeprom *good_eeprom)
 	int r = 0;
 	for (d = first_eeprom; d != NULL; d = d->next)
 	{
+		if (d == good_eeprom)
+			continue;
+		
 		// Repair all eeproms with lower wc or non-matching SHA256
 		if (d->wc < good_eeprom->wc || strcmp(d->sha256, good_eeprom->sha256) != 0)
 		{
@@ -546,10 +580,24 @@ int repair_all_eeproms(struct eeprom *good_eeprom)
 			if (r < 0)
 				return r;
 		}
+		
+		// Link data together
+		d->data = good_eeprom->data;
 		i++;
 	}
 }
 
+
+/**
+ * Returns whether eeprom manager is initialized
+ * 
+ * @return 1 if initialized, 0 otherwise
+ */
+int is_initialized()
+{
+	// TODO: Semaphore is very required here
+	return first_eeprom != NULL && good_eeprom != NULL;
+}
 
 /*
  *  API Function Definitions
@@ -597,6 +645,9 @@ int eeprom_manager_initialize()
 
 void eeprom_manager_cleanup()
 {
+	if (is_initialized() == 0)
+		return -EINVAL;
+	
 	clear_eeprom_metadata();
 }
 
@@ -608,26 +659,52 @@ void eeprom_manager_set_verbosity(int level)
 
 int eeprom_manager_set_value(char *key, char *value, int flags)
 {
+	if (is_initialized() == 0)
+		return -EINVAL;
 	
+	errno = ENOSYS;
+	return -1;
 }
 
 int eeprom_manager_read_value(char *key, char *value, int length)
 {
+	if (is_initialized() == 0)
+		return -EINVAL;
 	
+	errno = ENOSYS;
+	return -1;
 }
 
 int eeprom_manager_clear()
 {
+	struct eeprom *d;
+	if (is_initialized() == 0)
+		return -EINVAL;
 	
+	open_eeproms();
+	
+	// Write an empty JSON structure into good_eeprom, and populate that through
+	strncpy(good_eeprom->data, "{}", eeprom_data_size);
+	write_all_eeproms();
+	
+	
+	close_eeproms();
 }
 
 int eeprom_manager_verify()
 {
+	if (is_initialized() == 0)
+		return -EINVAL;
 	
+	errno = ENOSYS;
+	return -1;
 }
 
 struct eeprom *eeprom_manager_info()
 {
+	if (is_initialized() == 0)
+		return -EINVAL;
+	
 	return first_eeprom;
 }
 
