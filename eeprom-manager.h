@@ -16,7 +16,6 @@
 #define EEPROM_MANAGER_CONF_PATH         "/etc/eeprom-manager.conf"
 
 #define EEPROM_MANAGER_SET_NO_CREATE (1 << 0)
-#define EEPROM_MANAGER_SET_ZERO      (1 << 1)
 
 /**
  * EEPROM metadata structure
@@ -77,7 +76,6 @@ void eeprom_manager_set_verbosity(int level);
  * The specified key is set to the specified value.
  * Flags can be one or more of the following:
  * EEPROM_MANAGER_SET_NO_CREATE   - Do not create a new key if it does not exist
- * EEPROM_MANAGER_SET_ZERO        - Clear the EEPROM device before writing (very slow)
  * 
  * Note: key name and value are truncated at EEPROM_MANAGER_MAX_KEY_LENGTH
  *       and EEPROM_MANAGER_MAX_VALUE_LENGTH respectively

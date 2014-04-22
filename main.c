@@ -57,10 +57,10 @@ void usage(char *name)
  * Sets key to value in EEPROM
  * @return value returned by eeprom_manager_set
  */
-int set_key(char *key, char *value, int zero, int no_add)
+int set_key(char *key, char *value, int no_add)
 {
 	int r, err;
-	int flags = (zero ? EEPROM_MANAGER_SET_ZERO : 0) | (no_add ? EEPROM_MANAGER_SET_NO_CREATE : 0);
+	int flags = (no_add ? EEPROM_MANAGER_SET_NO_CREATE : 0);
 	r = eeprom_manager_set_value(key, value, flags);
 	err = errno;
 	if (!r)
@@ -183,7 +183,7 @@ int main(int argc, char **argv)
 	if (argc < 2)
 		usage(argv[0]);
 	
-	while ((c = getopt (argc, argv, "qznvh")) != -1)
+	while ((c = getopt (argc, argv, "qnvh")) != -1)
 	{
 		switch (c)
 		{
@@ -192,9 +192,6 @@ int main(int argc, char **argv)
 				break;
 			case 'v':
 				eeprom_manager_set_verbosity(eeprom_manager_verbosity++);
-				break;
-			case 'z':
-				zero = 1;
 				break;
 			case 'n':
 				no_add = 1;
@@ -214,11 +211,9 @@ int main(int argc, char **argv)
 		r = -1;
 	}
 	else if (strcmp(argv[optind], "set") == 0)
-		r = set_key(argv[optind + 1], argv[optind + 2], zero, no_add);
+		r = set_key(argv[optind + 1], argv[optind + 2], no_add);
 	else
 	{
-		if (zero)
-			WARN("Ignoring argument -z\n");
 		if (no_add)
 			WARN("Ignoring argument -n\n");
 		
