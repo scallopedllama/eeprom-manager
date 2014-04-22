@@ -11,8 +11,12 @@
 #include "eeprom-manager.h"
 
 int eeprom_manager_verbosity = 0;
+size_t eeprom_data_size = 0;
+int number_eeproms = 0;
 struct eeprom *first_eeprom = NULL;
 struct eeprom *last_eeprom = NULL;
+struct eeprom *good_eeprom = NULL;
+
 
 /**
  * Safely Clears the eeproms linked list
@@ -24,7 +28,13 @@ void clear_eeprom_metadata()
 	{
 		struct eeprom *prev_eeprom = current_eeprom;
 		current_eeprom = current_eeprom->next;
+		if (prev_eeprom->data != NULL)
+		{
+			free(prev_eeprom->data);
+			prev_eeprom->data = NULL;
+		}
 		free(prev_eeprom);
+		prev_eeprom = NULL;
 	}
 }
 
@@ -40,6 +50,7 @@ void push_eeprom_metadata(struct eeprom *new_eeprom)
 		      first_eeprom = last_eeprom = new_eeprom;
 	else
 		last_eeprom->next = new_eeprom;
+	number_eeproms++;
 }
 
 
@@ -171,9 +182,9 @@ int read_write_eeprom_metadata(struct eeprom *device, char op)
 /**
  * Reads or Writes the EEPROM contents
  * 
- * Either reads from the already-open fd writing into string or writes from the
- * string into the fd in bs chunks a maximum of count times, stopping after the
- * first null byte is encountered.
+ * Either reads from the already-open fd writing into device data variable or writes
+ * from the device data variable into the fd in bs chunks a maximum of count times,
+ * stopping after the first null byte is encountered.
  * 
  * Also reads or writes the sha256 and write count from the end of the device.
  * Returns -EIO if it fails while trying to read or write the EEPROM.
@@ -181,20 +192,36 @@ int read_write_eeprom_metadata(struct eeprom *device, char op)
  * 
  * @param op     'r' or 'w' to Read or Write respectively
  * @param device Loaded EEPROM structure with updated sha256 and wc variables
- * @param buf    String into which the contents should be written. sizeof must be at least (bs * (count - 1) + 1)
  * @return < 0 to indicate failure, else length of the JSON string read
  */
-size_t read_write_eeprom(struct eeprom *device, char op, char *buf)
+size_t read_write_eeprom(struct eeprom *device, char op)
 {
 	int i, retval, r, null_found;
-	char *pos = buf;
+	char *pos = NULL;
 	
 	if (op != 'r' && op != 'w')
 		return -EINVAL;
 	
+	// Make sure data is allocated
+	if (op == 'r')
+	{
+		if (device->data == NULL)
+			device->data = malloc(eeprom_data_size);
+		if (device->data == NULL)
+		{
+			fprintf(stderr, "ERROR: Cannot allocate memory for EEPROM data.\n");
+			return -ENOMEM;
+		}
+	}
+	else if (device->data == NULL)
+		return -EINVAL;
+	
+	// Set starting position
+	pos = device->data;
+	
 	// Clear the buffer if reading
 	if (op == 'r')
-		memset(buf, 0, (device->bs * device->count) + 1);
+		memset(device->data, 0, (device->bs * device->count) + 1);
 	// Clear the last block if writing
 	if (op == 'w')
 	{
@@ -240,6 +267,7 @@ size_t read_write_eeprom(struct eeprom *device, char op, char *buf)
 		retval = (device->count * device->bs) + 1;
 	
 	// Read / write the device->sha256 and device->wc at the end of the device
+	// TODO: This may not be required for reading, but is definitely required for writing
 	read_write_eeprom_metadata(device, op);
 	
 	return retval;
@@ -249,17 +277,19 @@ size_t read_write_eeprom(struct eeprom *device, char op, char *buf)
 /**
  * Writes data to EEPROM
  * 
- * Takes the provided buffer, calculates its sha256 value
+ * Calculates the sha256 checksum for device->data
  * then writes that data to the provided eeprom device.
  * 
  * @param device EEPROM device to write to
- * @param buf    String data to write to EEPROM
  */
-int write_eeprom(struct eeprom *device, char *buf)
+int write_eeprom(struct eeprom *device)
 {
+	if (device->data == NULL)
+		return -EINVAL;
+	
 	// Calculate sha256
 	char sha256[EEPROM_MANAGER_SHA_STRING_LENGTH];
-	get_sha256_string(buf, sha256);
+	get_sha256_string(device->data, sha256);
 	
 	// Don't write anything if the SHA hasn't changed
 	if (strcmp(device->sha256, sha256) == 0)
@@ -267,29 +297,33 @@ int write_eeprom(struct eeprom *device, char *buf)
 	
 	// Write data
 	device->wc++;
-	return read_write_eeprom(device, 'w', buf);
+	return read_write_eeprom(device, 'w');
 }
 
 
 /**
  * Reads the contents of the eeprom and verifies the sha256 sum,
- * returing the write count on success.
+ * returing the write count on success. Frees read data if invalid.
  * 
  * @param device EEPROM device to verify
- * @return -1 on non-match, write count on success
+ * @return -1 on non-match or error, write count on success
  */
 int verify_eeprom(struct eeprom *device)
 {
-	char data_buffer[device->bs * device->count + 1];
 	char sha256[EEPROM_MANAGER_SHA_STRING_LENGTH];
 	
-	int r = read_write_eeprom(device, 'r', data_buffer);
+	int r = read_write_eeprom(device, 'r');
 	if (r < 0)
 		return r;
-	get_sha256_string(data_buffer, sha256);
+	get_sha256_string(device->data, sha256);
 	
 	if (strcmp(sha256, device->sha256) != 0)
+	{
+		// Don't keep invalid data around
+		free(device->data);
+		device->data = NULL;
 		return -1;
+	}
 	return device->wc;
 }
 
@@ -361,6 +395,7 @@ int load_conf_data()
 {
 	FILE *config = NULL;
 	size_t last_bs = 0, last_count = 0;
+	int min_size = -1;
 	
 	// Load config file
 	config = fopen(EEPROM_MANAGER_CONF_PATH, "r");
@@ -399,9 +434,13 @@ int load_conf_data()
 		}
 		
 		// Load up structure
+		memset(new_eeprom, 0, sizeof(struct eeprom));
 		strncpy(new_eeprom->path, path, EEPROM_MANAGER_PATH_MAX_LENGTH);
 		new_eeprom->bs = bs;
 		new_eeprom->count = (size / bs);
+		
+		if (size < min_size || min_size < 0)
+			min_size = size;
 		
 		// Warn if all EEPROMs are not the same size
 		if (last_bs == 0) last_bs = bs;
@@ -411,6 +450,8 @@ int load_conf_data()
 		
 		push_eeprom_metadata(new_eeprom);
 	}
+	
+	eeprom_data_size = min_size;
 	
 	fclose(config);
 }
@@ -424,6 +465,7 @@ int load_conf_data()
 int eeprom_manager_initialize()
 {
 	static int initialized = 0;
+	int r = 0;
 	
 	// Don't do anything if already initialized
 	if (initialized) return 0;
@@ -432,12 +474,77 @@ int eeprom_manager_initialize()
 	if (load_conf_data() < 0)
 		return -1;
 	
-	// Load up all meta-data
-	struct eeprom *d = NULL;
-	int max_wc = -1;
-	for (d = first_eeprom; d != NULL; d = d->next)
-		read_write_eeprom_metadata(d, 'r');
+	// Open EEPROM files
+	// TODO: Handle bad return here
+	r = open_eeproms();
 	
+	// Load up all meta-data and build a list of EEPROMS with the highest wc
+	struct eeprom *d = first_eeprom;
+	struct eeprom *max_wc_eeprom[number_eeproms];
+	int i = 0;
+	memset(max_wc_eeprom, 0, number_eeproms);
+	max_wc_eeprom[i++] = d;
+	for (d = first_eeprom; d != NULL; d = d->next)
+	{
+		// Load metadata for this eeprom
+		int r = read_write_eeprom_metadata(d, 'r');
+		
+		// Reset max list if this one has a higher wc
+		if (d->wc > max_wc_eeprom[0]->wc)
+		{
+			memset(max_wc_eeprom, 0, number_eeproms);
+			i = 0;
+			max_wc_eeprom[i++] = d;
+		}
+		
+		// Add this one to the max list if it is the same
+		if (d->wc == max_wc_eeprom[0]->wc)
+			max_wc_eeprom[i++] = d;
+	}
+	
+	// Find known good eeprom
+	for (i = 0; max_wc_eeprom[i] != NULL; i++)
+	{
+		// verify_eeprom will call read_write_eeprom which will allocate heap
+		// storage and load the eeprom contents into device->data.
+		// If it checks out, the data remains, if it fails validation, it fress that data.
+		// The result here is that after this loop, good_eeprom->data is the only allocated data.
+		if (verify_eeprom(max_wc_eeprom[i]) == max_wc_eeprom[i]->wc)
+		{
+			good_eeprom = max_wc_eeprom[i];
+			break;
+		}
+	}
+	
+	// Check for the possibility that no devices were good...
+	if (good_eeprom == NULL)
+	{
+		fprintf(stderr, "ERROR: No EEPROM devices passed sha256 checksum! All data appears to be lost.\n");
+		fprintf(stderr, "       EEPROM Manager will continue with an empty device.\n");
+	}
+	
+	// Do any required repairs
+	i = 0;
+	for (d = first_eeprom; d != NULL; d = d->next)
+	{
+		// Repair all eeproms with lower wc or non-matching SHA256
+		if (d->wc < good_eeprom->wc || strcmp(d->sha256, good_eeprom->sha256) != 0)
+		{
+			fprintf(stderr, "WARNING: Repairing EEPROM %d because its write-count or sha256 was incorrect.\n", i);
+			
+			// write_eeprom will only write data if sha has changed, so clear sha to make sure that happens
+			d->sha256[0] = '\0';
+			// Make sure the written eeprom ends up with the same wc as the good eeprom
+			d->wc = good_eeprom->wc - 1;
+			d->data = good_eeprom->data;
+			write_eeprom(d);
+		}
+		i++;
+	}
+	
+	// Close EEPROM files
+	// TODO: Handle bad return here
+	r = open_eeproms();
 	
 	initialized = 1;
 	return 0;

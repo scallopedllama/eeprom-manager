@@ -31,6 +31,7 @@ struct eeprom {
 	int fd;                                        /**< File descriptor number for the opened file (0 if closed) */
 	char sha256[EEPROM_MANAGER_SHA_STRING_LENGTH]; /**< SHA256 for data on device. */
 	unsigned int wc;                               /**< Device write count. */
+	char *data;                                    /**< String data stored in EEPROM */
 	
 	struct eeprom *next;                           /**< Next eeprom in the list. NULL if last item. */
 };
