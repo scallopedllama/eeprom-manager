@@ -148,8 +148,8 @@ size_t read_write_all(struct eeprom *device, char op, void *buf, size_t count)
 	// Make sure it was all read or written
 	if (attempts >= EEPROM_MANAGER_MAX_RW_ATTEMPTS)
 	{
-		fprintf(stderr, "ERROR: Attempted %d times to %s %d bytes\n", EEPROM_MANAGER_MAX_RW_ATTEMPTS, (op == 'r' ? "read" : "write"), count);
-		fprintf(stderr, "       but only managed to %s %d bytes. Aborting.\n", (op == 'r' ? "read" : "write"), r);
+		fprintf(stderr, "ERROR: Attempted %d times to %s %lu bytes\n", EEPROM_MANAGER_MAX_RW_ATTEMPTS, (op == 'r' ? "read" : "write"), count);
+		fprintf(stderr, "       but only managed to %s %lu bytes. Aborting.\n", (op == 'r' ? "read" : "write"), r);
 		return -EIO;
 	}
 	
@@ -217,7 +217,8 @@ int read_write_eeprom_metadata(struct eeprom *device, char op)
  */
 size_t read_write_eeprom(struct eeprom *device, char op)
 {
-	int i, retval, r, null_found;
+	size_t i;
+	int retval, r, null_found;
 	char *pos = NULL;
 	
 	if (op != 'r' && op != 'w')
@@ -249,8 +250,11 @@ size_t read_write_eeprom(struct eeprom *device, char op)
 		char zero_block[device->bs];
 		memset(zero_block, 0, device->bs);
 		lseek(device->fd, -1 * device->bs, SEEK_END);
-		// TODO: Check for errors
 		r = read_write_all(device, 'w', zero_block, device->bs);
+		if (r < 0)
+		{
+			// TODO: Check for errors
+		}
 	}
 	
 	// Start at the beginning of the device
@@ -266,8 +270,11 @@ size_t read_write_eeprom(struct eeprom *device, char op)
 			null_found = clear_after_null(pos, device->bs);
 		
 		// Do read or write
-		// TODO: Check for errors
 		r = read_write_all(device, op, pos, device->bs);
+		if (r < 0)
+		{
+			// TODO: Check for errors
+		}
 		
 		// If reading, clear bytes after null here
 		if (op == 'r')
@@ -289,7 +296,11 @@ size_t read_write_eeprom(struct eeprom *device, char op)
 	
 	// Read / write the device->sha256 and device->wc at the end of the device
 	// TODO: This may not be required for reading, but is definitely required for writing
-	read_write_eeprom_metadata(device, op);
+	r = read_write_eeprom_metadata(device, op);
+	if (r < 0)
+	{
+		// TODO: Check for errors
+	}
 	
 	return retval;
 }
@@ -408,6 +419,7 @@ int open_eeproms()
 	{
 		// Open the file
 		current_eeprom->fd = open(current_eeprom->path, 0);
+		// TODO: Make sure this opened correctly
 		// Get an advisory lock on it
 		while((r = flock(current_eeprom->fd, LOCK_EX)) != 0 && errno == EINTR);
 		if (r != 0)
@@ -415,8 +427,7 @@ int open_eeproms()
 			err = errno;
 			fprintf(stderr, "Failed to get lock on EEPROM %s: %s\n", current_eeprom->path, strerror(err));
 			// TODO: Proper cleanup, or just ignore this one?
-			errno = err;
-			return -1;
+			return -err;
 		}
 	}
 	return 0;
@@ -464,12 +475,12 @@ int close_eeproms()
 int load_conf_data()
 {
 	FILE *config = NULL;
-	size_t last_bs = 0, last_count = 0;
-	int min_size = -1;
+	size_t last_bs = 0, last_count = 0, min_size = 0;
+	int first_config_eeprom = 1;
 	
 	// Load config file
 	config = fopen(EEPROM_MANAGER_CONF_PATH, "r");
-	if (config == NULL)
+	if (config == NULL) // TODO: return proper errno
 		return -1;
 	
 	// Parse config file
@@ -477,8 +488,7 @@ int load_conf_data()
 	{
 		struct eeprom *new_eeprom = NULL;
 		char path[EEPROM_MANAGER_PATH_MAX_LENGTH];
-		int bs;
-		int size;
+		size_t bs, size;
 		
 		// Skip comments
 		if (fgetc(config) == '#')
@@ -487,7 +497,7 @@ int load_conf_data()
 			continue;
 		}
 		
-		fscanf(config, "%s %d %d\n", path, &bs, &size);
+		fscanf(config, "%s %lu %lu\n", path, &bs, &size);
 		new_eeprom = malloc(sizeof(struct eeprom));
 		if (new_eeprom == NULL)
 		{
@@ -509,7 +519,8 @@ int load_conf_data()
 		new_eeprom->bs = bs;
 		new_eeprom->count = (size / bs);
 		
-		if (size < min_size || min_size < 0)
+		// If the size of this eeprom is smaller or this is the first eeprom
+		if (size < min_size || first_config_eeprom)
 			min_size = size;
 		
 		// Warn if all EEPROMs are not the same size
@@ -519,11 +530,13 @@ int load_conf_data()
 			fprintf(stderr, "WARNING: EEPROM at path %s does not appear to be the same size as other devices. May have unexpected behavior.\n", path);
 		
 		push_eeprom_metadata(new_eeprom);
+		first_config_eeprom = 0;
 	}
 	
 	eeprom_data_size = min_size;
 	
 	fclose(config);
+	return 0;
 }
 
 /**
@@ -542,14 +555,18 @@ struct eeprom *find_good_eeprom()
 	// Load up all meta-data and build a list of EEPROMS with the highest wc
 	struct eeprom *d = first_eeprom;
 	struct eeprom *max_wc_eeprom[number_eeproms];
-	struct eeprom *r = NULL;
-	int i = 0;
+	struct eeprom *ret = NULL;
+	int i = 0, r = 0;
 	memset(max_wc_eeprom, 0, number_eeproms);
 	max_wc_eeprom[i++] = d;
 	for (d = first_eeprom; d != NULL; d = d->next)
 	{
 		// Load metadata for this eeprom
-		int r = read_write_eeprom_metadata(d, 'r');
+		r = read_write_eeprom_metadata(d, 'r');
+		if (r < 0)
+		{
+			// TODO: Handle error return
+		}
 		
 		// Reset max list if this one has a higher wc
 		if (d->wc > max_wc_eeprom[0]->wc)
@@ -570,16 +587,17 @@ struct eeprom *find_good_eeprom()
 		// verify_eeprom will call read_write_eeprom which will allocate heap
 		// storage and load the eeprom contents into device->data.
 		// If it checks out, the data remains, if it fails validation, it fress that data.
-		// The result here is that after this loop, r->data is the only allocated data.
-		if (verify_eeprom(max_wc_eeprom[i]) == max_wc_eeprom[i]->wc)
+		// The result here is that after this loop, ret->data is the only allocated data.
+		if (verify_eeprom(max_wc_eeprom[i]) == 0)
 		{
-			r = max_wc_eeprom[i];
+			ret = max_wc_eeprom[i];
 			break;
 		}
 	}
 	
-	return r;
+	return ret;
 }
+
 
 /**
  * Repairs bad EEPROM devices
@@ -646,8 +664,11 @@ int eeprom_manager_initialize()
 		return -1;
 	
 	// Open EEPROM files
-	// TODO: Handle bad return here
 	r = open_eeproms();
+	if (r < 0)
+	{
+		// TODO: Handle bad return here
+	}
 	
 	// Find the good eeprom and make sure it found one
 	good_eeprom = find_good_eeprom();
@@ -661,11 +682,17 @@ int eeprom_manager_initialize()
 	
 	// Repair any bad eeproms
 	r = repair_all_eeproms(good_eeprom);
-	// TODO: Handle bad return
+	if (r < 0)
+	{
+		// TODO: Handle bad return here
+	}
 	
 	// Close EEPROM files
-	// TODO: Handle bad return here
 	r = open_eeproms();
+	if (r < 0)
+	{
+		// TODO: Handle bad return here
+	}
 	
 	initialized = 1;
 	return 0;
@@ -674,10 +701,10 @@ int eeprom_manager_initialize()
 
 void eeprom_manager_cleanup()
 {
-	if (is_initialized() == 0)
-		return -EINVAL;
-	
-	clear_eeprom_metadata();
+	if (is_initialized())
+	{
+		clear_eeprom_metadata();
+	}
 }
 
 
@@ -874,7 +901,10 @@ int eeprom_manager_verify()
 struct eeprom *eeprom_manager_info()
 {
 	if (is_initialized() == 0)
-		return -EINVAL;
+	{
+		errno = EINVAL;
+		return NULL;
+	}
 	
 	return first_eeprom;
 }
