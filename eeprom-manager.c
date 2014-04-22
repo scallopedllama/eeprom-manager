@@ -67,9 +67,12 @@ void push_eeprom_metadata(struct eeprom *new_eeprom)
 	new_eeprom->fd = 0;
 	
 	if (first_eeprom == NULL)
-		      first_eeprom = last_eeprom = new_eeprom;
+		first_eeprom = last_eeprom = new_eeprom;
 	else
+	{
 		last_eeprom->next = new_eeprom;
+		last_eeprom = new_eeprom;
+	}
 	number_eeproms++;
 }
 
