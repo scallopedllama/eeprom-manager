@@ -17,6 +17,7 @@
 // TODO: Need mechanism to remove misbehaving eeprom from pool if it's failing to write and such
 // TODO: Check all functions for situations where bad input could cause segfault and handle it.
 // TODO: Add check for EEPROM write roll-over
+// TODO: handle janson error returns
 
 int eeprom_manager_verbosity = 0;
 size_t eeprom_data_size = 0;
@@ -24,6 +25,8 @@ int number_eeproms = 0;
 struct eeprom *first_eeprom = NULL;
 struct eeprom *last_eeprom = NULL;
 struct eeprom *good_eeprom = NULL;
+json_t *json_root = NULL;
+json_error_t json_error;
 
 
 /**
@@ -346,13 +349,16 @@ int clone_eeproms(struct eeprom *src, struct eeprom *dest)
  * @param src eeprom from which data should be written to all devices. Use NULL to write what is in the eeprom device's data.
  * @return < 0 on error, total number of bytes written on success (can be 0, not error)
  */
-int write_all_eeproms()
+int write_all_eeproms(struct eeprom *src)
 {
 	struct eeprom *d;
 	int r, t = 0;
 	for (d = first_eeprom; d != NULL; d = d->next)
 	{
-		r = write_eeprom(d);
+		if (src && src != d)
+			r = clone_eeproms(src, d);
+		else
+			r = write_eeprom(d);
 		if (r < 0)
 			return r;
 		t += r;
@@ -680,22 +686,124 @@ void eeprom_manager_set_verbosity(int level)
 	   eeprom_manager_verbosity = level;
 }
 
+
 int eeprom_manager_set_value(char *key, char *value, int flags)
 {
+	int r = 0;
+	json_t *json_value = NULL;
 	if (is_initialized() == 0)
-		return -EINVAL;
+	{
+		errno = EINVAL;
+		return -1;
+	}
 	
-	errno = ENOSYS;
-	return -1;
+	if (key == NULL || value == NULL)
+	{
+		errno = EINVAL;
+		return -1;
+	}
+	
+	// Load up JSON data
+	json_root = json_loads(good_eeprom->data, 0, &json_error);
+	if (json_root == NULL)
+	{
+		// TODO: Handle JSON errors. These should really never happen if the sha checked out
+		fprintf(stderr, "JSON error on line %d: %s\n", json_error.line, json_error.text);
+		return -1;
+	}
+	if (!json_is_object(json_root))
+	{
+		fprintf(stderr, "JSON error: Data is not an object.\n");
+		json_decref(json_root);
+		return -1;
+	}
+	
+	// Make sure key exists if NO_CREATE is set
+	if (flags & EEPROM_MANAGER_SET_NO_CREATE)
+	{
+		if (json_object_get(json_root, key) == NULL)
+		{
+			// TODO: set errno correctly here
+			return -1;
+		}
+	}
+	
+	// Make the value string
+	json_value = json_string(value);
+	r = json_object_set(json_root, key, json_value);
+	if (r < 0)
+	{
+		// TODO: set errno correctly here
+		return -1;
+	}
+	
+	// Make sure there is no eeprom data, the use the reference from json_dumps
+	free_eeprom_data(good_eeprom);
+	good_eeprom->data = json_dumps(json_root, JSON_COMPACT);
+	
+	// Write the new data to the eeprom
+	write_all_eeproms(good_eeprom);
+	
+	// Clean up JSON data
+	json_decref(json_root);
+	
+	return 0;
 }
+
 
 int eeprom_manager_read_value(char *key, char *value, int length)
 {
+	json_t *json_value = NULL;
+	char *json_txt_value = NULL;
 	if (is_initialized() == 0)
-		return -EINVAL;
+	{
+		errno = EINVAL;
+		return -1;
+	}
 	
-	errno = ENOSYS;
-	return -1;
+	if (key == NULL || value == NULL)
+	{
+		errno = EINVAL;
+		return -1;
+	}
+	
+	// Load up JSON data
+	json_root = json_loads(good_eeprom->data, 0, &json_error);
+	if (json_root == NULL)
+	{
+		// TODO: Handle JSON errors. These should really never happen if the sha checked out
+		fprintf(stderr, "JSON error on line %d: %s\n", json_error.line, json_error.text);
+		return -1;
+	}
+	if (!json_is_object(json_root))
+	{
+		fprintf(stderr, "JSON error: Data is not an object.\n");
+		json_decref(json_root);
+		return -1;
+	}
+	
+	// Get the value
+	json_value = json_object_get(json_root, key);
+	if (json_value == NULL)
+	{
+		// TODO set proper errno
+		return -1;
+	}
+	if (!json_is_string(json_value))
+	{
+		fprintf(stderr, "JSON error: Key's data is not a string.\n");
+		json_decref(json_root);
+		return -1;
+	}
+	
+	// Copy the value into the return variable
+	json_txt_value = (char *) json_string_value(json_value);
+	strncpy(value, json_txt_value, length);
+	
+	// Clean up JSON data
+	json_decref(json_root);
+	
+	return 0;
 }
 
 int eeprom_manager_clear()
