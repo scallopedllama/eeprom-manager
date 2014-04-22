@@ -27,6 +27,19 @@ struct eeprom *good_eeprom = NULL;
 
 
 /**
+ * Frees eeprom data if it exists
+ */
+void free_eeprom_data(struct eeprom *device)
+{
+	if (device->data != NULL)
+	{
+		free(device->data);
+		device->data = NULL;
+	}
+}
+
+
+/**
  * Safely Clears the eeproms linked list
  */
 void clear_eeprom_metadata()
@@ -36,11 +49,7 @@ void clear_eeprom_metadata()
 	{
 		struct eeprom *prev_eeprom = current_eeprom;
 		current_eeprom = current_eeprom->next;
-		if (prev_eeprom->data != NULL)
-		{
-			free(prev_eeprom->data);
-			prev_eeprom->data = NULL;
-		}
+		free_eeprom_data(prev_eeprom);
 		free(prev_eeprom);
 		prev_eeprom = NULL;
 	}
@@ -350,11 +359,10 @@ int verify_eeprom(struct eeprom *device)
 	if (strcmp(sha256, device->sha256) != 0)
 	{
 		// Don't keep invalid data around
-		free(device->data);
-		device->data = NULL;
+		free_eeprom_data(device);
 		return -1;
 	}
-	return device->wc;
+	return 0;
 }
 
 
