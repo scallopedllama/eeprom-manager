@@ -126,6 +126,7 @@ int clear_after_null(char *buf, int length)
  * @param fd    File descriptor to write to
  * @param buf   Buffer to write from
  * @param count Number of bytes to write from buf to fd
+ * @return 0 on success, < 0 on error
  */
 size_t read_write_all(struct eeprom *device, char op, void *buf, size_t count)
 {
@@ -323,6 +324,7 @@ int write_eeprom(struct eeprom *device)
  * 
  * Iterates through the eeprom list, calling write_eeprom on each.
  * 
+ * @param src eeprom from which data should be written to all devices. Use NULL to write what is in the eeprom device's data.
  * @return < 0 on error, total number of bytes written on success (can be 0, not error)
  */
 int write_all_eeproms()
@@ -345,7 +347,7 @@ int write_all_eeproms()
  * returing the write count on success. Frees read data if invalid.
  * 
  * @param device EEPROM device to verify
- * @return -1 on non-match or error, write count on success
+ * @return -1 on non-match or error, 0 on success
  */
 int verify_eeprom(struct eeprom *device)
 {
@@ -371,7 +373,7 @@ int verify_eeprom(struct eeprom *device)
  * 
  * Iterates through the eeproms list and opens all the files then gets an advisory lock on them.
  * 
- * @return 0 on success, -1 on error (check errno)
+ * @return 0 on success, < 0 on error
  */
 int open_eeproms()
 {
@@ -699,6 +701,7 @@ int eeprom_manager_clear()
 	close_eeproms();
 }
 
+// TODO: Support -1 and 0 returns for this function
 int eeprom_manager_verify()
 {
 	if (is_initialized() == 0)
