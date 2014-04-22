@@ -10,6 +10,12 @@
 
 #include "eeprom-manager.h"
 
+
+// TODO: ALL THESE API CALLS AND SUCH MUST BE PROTECTED BY A SEMAPHORE TO BE THREAD SAFE!!
+// TODO: Needs check to make sure all data fits in eeprom
+// TODO: Add a level of caching to all this, need a function that checks the last block on all devices and uses previous json state if wc hasn't changed.
+// TODO: Need mechanism to remove misbehaving eeprom from pool if it's failing to write and such
+
 int eeprom_manager_verbosity = 0;
 size_t eeprom_data_size = 0;
 int number_eeproms = 0;
@@ -281,6 +287,7 @@ size_t read_write_eeprom(struct eeprom *device, char op)
  * then writes that data to the provided eeprom device.
  * 
  * @param device EEPROM device to write to
+ * @return < 1 on error, number of bytes written on success (can be 0, not error)
  */
 int write_eeprom(struct eeprom *device)
 {
@@ -327,9 +334,6 @@ int verify_eeprom(struct eeprom *device)
 	return device->wc;
 }
 
-// TODO: ALL THESE API CALLS AND SUCH MUST BE PROTECTED BY A SEMAPHORE TO BE THREAD SAFE!!
-// TODO: Needs check to make sure all data fits in eeprom
-// TODO: Add a level of caching to all this, need a function that checks the last block on all devices and uses previous json state if wc hasn't changed.
 
 /**
  * Opens all EEPROM files
@@ -456,31 +460,23 @@ int load_conf_data()
 	fclose(config);
 }
 
-
-/*
- *  API Function Definitions
+/**
+ * Finds the good eeprom to use
+ * 
+ * Loads metadata for all eeproms, building a list of eeproms
+ * with the max wc (ideally all of them), then scans that list
+ * looking for the first one with a correct sha256.
+ * That eeprom with the correct sha256 sum is the good_eeprom
+ * which is used.
+ * 
+ * @return pointer to the good_eeprom or NULL on error.
  */
-
-
-int eeprom_manager_initialize()
+struct eeprom *find_good_eeprom()
 {
-	static int initialized = 0;
-	int r = 0;
-	
-	// Don't do anything if already initialized
-	if (initialized) return 0;
-	
-	// Load the data from the configuration file
-	if (load_conf_data() < 0)
-		return -1;
-	
-	// Open EEPROM files
-	// TODO: Handle bad return here
-	r = open_eeproms();
-	
 	// Load up all meta-data and build a list of EEPROMS with the highest wc
 	struct eeprom *d = first_eeprom;
 	struct eeprom *max_wc_eeprom[number_eeproms];
+	struct eeprom *r = NULL;
 	int i = 0;
 	memset(max_wc_eeprom, 0, number_eeproms);
 	max_wc_eeprom[i++] = d;
@@ -508,23 +504,31 @@ int eeprom_manager_initialize()
 		// verify_eeprom will call read_write_eeprom which will allocate heap
 		// storage and load the eeprom contents into device->data.
 		// If it checks out, the data remains, if it fails validation, it fress that data.
-		// The result here is that after this loop, good_eeprom->data is the only allocated data.
+		// The result here is that after this loop, r->data is the only allocated data.
 		if (verify_eeprom(max_wc_eeprom[i]) == max_wc_eeprom[i]->wc)
 		{
-			good_eeprom = max_wc_eeprom[i];
+			r = max_wc_eeprom[i];
 			break;
 		}
 	}
 	
-	// Check for the possibility that no devices were good...
-	if (good_eeprom == NULL)
-	{
-		fprintf(stderr, "ERROR: No EEPROM devices passed sha256 checksum! All data appears to be lost.\n");
-		fprintf(stderr, "       EEPROM Manager will continue with an empty device.\n");
-	}
-	
-	// Do any required repairs
-	i = 0;
+	return r;
+}
+
+/**
+ * Repairs bad EEPROM devices
+ * 
+ * Scans the list of eeprom devices and repairs all non-correct
+ * devices by writing the good_eeprom contents there.
+ * 
+ * @param good_eeprom  - eeprom object to use a the known-good
+ * @return 0 on success, return from write_eeprom on error.
+ */
+int repair_all_eeproms(struct eeprom *good_eeprom)
+{
+	struct eeprom *d = first_eeprom;
+	int i = 0;
+	int r = 0;
 	for (d = first_eeprom; d != NULL; d = d->next)
 	{
 		// Repair all eeproms with lower wc or non-matching SHA256
@@ -537,10 +541,50 @@ int eeprom_manager_initialize()
 			// Make sure the written eeprom ends up with the same wc as the good eeprom
 			d->wc = good_eeprom->wc - 1;
 			d->data = good_eeprom->data;
-			write_eeprom(d);
+			r = write_eeprom(d);
+			// TODO: Handle this error gracefully.
+			if (r < 0)
+				return r;
 		}
 		i++;
 	}
+}
+
+
+/*
+ *  API Function Definitions
+ */
+
+
+int eeprom_manager_initialize()
+{
+	static int initialized = 0;
+	int r = 0;
+	
+	// Don't do anything if already initialized
+	if (initialized) return 0;
+	
+	// Load the data from the configuration file
+	if (load_conf_data() < 0)
+		return -1;
+	
+	// Open EEPROM files
+	// TODO: Handle bad return here
+	r = open_eeproms();
+	
+	// Find the good eeprom and make sure it found one
+	good_eeprom = find_good_eeprom();
+	if (good_eeprom == NULL)
+	{
+		fprintf(stderr, "ERROR: No EEPROM devices passed sha256 checksum! All data appears to be lost.\n");
+		// TODO: Handle this error situation. negative return from here should maybe trigger a clear().
+		fprintf(stderr, "       EEPROM Manager will continue with an empty device.\n");
+		return -1;
+	}
+	
+	// Repair any bad eeproms
+	r = repair_all_eeproms(good_eeprom);
+	// TODO: Handle bad return
 	
 	// Close EEPROM files
 	// TODO: Handle bad return here
