@@ -808,28 +808,67 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 
 int eeprom_manager_clear()
 {
-	struct eeprom *d;
+	int r = 0;
 	if (is_initialized() == 0)
-		return -EINVAL;
+	{
+		errno = EINVAL;
+		return -1;
+	}
 	
-	open_eeproms();
+	r = open_eeproms();
+	if (r < 0)
+	{
+		// TODO Handle error
+	}
 	
 	// Write an empty JSON structure into good_eeprom, and populate that through
-	strncpy(good_eeprom->data, "{}", eeprom_data_size);
-	write_all_eeproms();
+	free_eeprom_data(good_eeprom);
+	good_eeprom->data = "{}";
+	r = write_all_eeproms(good_eeprom);
+	if (r < 0)
+	{
+		// TODO Handle error
+	}
 	
+	r = close_eeproms();
+	if (r < 0)
+	{
+		// TODO Handle error
+	}
 	
-	close_eeproms();
+	return r;
 }
 
 // TODO: Support -1 and 0 returns for this function
 int eeprom_manager_verify()
 {
-	if (is_initialized() == 0)
-		return -EINVAL;
+	struct eeprom *d = NULL;
+	int r = 1, t = 0;
 	
-	errno = ENOSYS;
-	return -1;
+	if (is_initialized() == 0)
+	{
+		errno = EINVAL;
+		return -1;
+	}
+	
+	// TODO: Need to get the all-eeproms-are-bunk return from find_good_eeprom here
+	//       ----> return 0
+	
+	for (d = first_eeprom; d != NULL; d = d->next)
+	{
+		// Initialze function already has verified that the good_eeprom is good, so skip it
+		if (d == good_eeprom)
+			continue;
+		
+		t = verify_eeprom(d);
+		if (t < 0)
+		{
+			t = clone_eeproms(good_eeprom, d);
+			// TODO: Handle this error return
+			r = 2;
+		}
+	}
+	return r;
 }
 
 struct eeprom *eeprom_manager_info()
