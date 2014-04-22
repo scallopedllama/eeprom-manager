@@ -319,6 +319,25 @@ int write_eeprom(struct eeprom *device)
 	return read_write_eeprom(device, 'w');
 }
 
+
+/**
+ * Writes same data from one eeprom to another
+ * 
+ * @param src eeprom device to get data from
+ * @param dest eeprom device to write data to
+ * @return return from write_eeprom
+ */
+int clone_eeproms(struct eeprom *src, struct eeprom *dest)
+{
+	// write_eeprom will only write data if sha has changed, so clear sha to make sure that happens
+	dest->sha256[0] = '\0';
+	// Make sure the written eeprom ends up with the same wc as the good eeprom
+	dest->wc = src->wc - 1;
+	dest->data = src->data;
+	return write_eeprom(dest);
+}
+
+
 /**
  * Writes all eeprom data to eeproms from the list.
  * 
@@ -579,22 +598,16 @@ int repair_all_eeproms(struct eeprom *good_eeprom)
 		if (d->wc < good_eeprom->wc || strcmp(d->sha256, good_eeprom->sha256) != 0)
 		{
 			fprintf(stderr, "WARNING: Repairing EEPROM %d because its write-count or sha256 was incorrect.\n", i);
-			
-			// write_eeprom will only write data if sha has changed, so clear sha to make sure that happens
-			d->sha256[0] = '\0';
-			// Make sure the written eeprom ends up with the same wc as the good eeprom
-			d->wc = good_eeprom->wc - 1;
-			d->data = good_eeprom->data;
-			r = write_eeprom(d);
+			r = clone_eeproms(good_eeprom, d);
 			// TODO: Handle this error gracefully.
 			if (r < 0)
 				return r;
 		}
 		
-		// Link data together
-		d->data = good_eeprom->data;
 		i++;
 	}
+	
+	return r;
 }
 
 
