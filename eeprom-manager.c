@@ -838,9 +838,9 @@ int eeprom_manager_clear()
 		return -1;
 	
 	// Write an empty JSON structure into good_eeprom, and populate that through
-	free_eeprom_data(good_eeprom);
-	good_eeprom->data = "{}";
-	r = write_all_eeproms(good_eeprom);
+	free_eeprom_data(first_eeprom);
+	first_eeprom->data = "{}";
+	r = write_all_eeproms(first_eeprom);
 	if (r < 0)
 	{
 		// TODO Handle error
