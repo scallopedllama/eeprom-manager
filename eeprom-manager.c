@@ -858,7 +858,7 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 
 int eeprom_manager_clear()
 {
-	int r = 0;
+	int r = 0, write_r = 0;
 	if (is_initialized() == 0)
 	{
 		errno = EINVAL;
@@ -871,14 +871,15 @@ int eeprom_manager_clear()
 	
 	// Write an empty JSON structure into good_eeprom, and populate that through
 	free_eeprom_data(first_eeprom);
-	first_eeprom->data = "{}";
-	r = write_all_eeproms(first_eeprom);
-	if (r < 0)
-		return r;
+	first_eeprom->data = malloc(eeprom_data_size);
+	strncpy(first_eeprom->data, "{}", eeprom_data_size);
+	write_r = write_all_eeproms(first_eeprom);
 	
 	r = close_eeproms();
 	if (r < 0)
 		return r;
+	if (write_r < 0)
+		return write_r;
 	
 	return r;
 }
