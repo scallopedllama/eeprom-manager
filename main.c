@@ -211,7 +211,7 @@ int main(int argc, char **argv)
 			ERROR("Could not open config file at %s\n", EEPROM_MANAGER_CONF_PATH);
 		ret = r;
 	}
-	if (r == EEPROM_MANAGER_INIT_NO_GOOD_DEVICES)
+	if (r == EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND)
 	{
 		if (!verbosity)
 			ret = r;
