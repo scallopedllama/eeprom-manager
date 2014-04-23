@@ -136,9 +136,9 @@ int clear_after_null(char *buf, int length)
  * @param count Number of bytes to write from buf to fd
  * @return number of bytes read / written on success, < 0 on error
  */
-int read_write_all(struct eeprom *device, char op, void *buf, size_t count)
+ssize_t read_write_all(struct eeprom *device, char op, void *buf, size_t count)
 {
-	int r = 0;
+	ssize_t r = 0;
 	unsigned int attempts = 0;
 	
 	if (op != 'r' && op != 'w')
@@ -149,9 +149,9 @@ int read_write_all(struct eeprom *device, char op, void *buf, size_t count)
 	
 	// Read and write may return less than count so keep trying until that much is read or written.
 	if (op == 'w')
-		while (((r += write(device->fd, buf, count)) < count) && (attempts++ < EEPROM_MANAGER_MAX_RW_ATTEMPTS));
+		while (((r += write(device->fd, buf, count)) < (ssize_t) count) && (attempts++ < EEPROM_MANAGER_MAX_RW_ATTEMPTS));
 	else
-		while (((r += read(device->fd, buf, count)) < count) && (attempts++ < EEPROM_MANAGER_MAX_RW_ATTEMPTS));
+		while (((r += read(device->fd, buf, count)) < (ssize_t) count) && (attempts++ < EEPROM_MANAGER_MAX_RW_ATTEMPTS));
 	
 	// Make sure it was all read or written
 	if (attempts >= EEPROM_MANAGER_MAX_RW_ATTEMPTS)
@@ -430,13 +430,13 @@ int verify_eeprom(struct eeprom *device)
  */
 int open_eeproms()
 {
-	int r, err;
+	int r;
 	struct eeprom *d = first_eeprom;
 	for (d = first_eeprom; d != NULL; d = d->next)
 	{
 		// TODO: Double-check error handling. This fails everything if one EEPROM has troubles
 		// Open the file
-		while((d->fd = open(d->path, 0)) != 0 && errno == EINTR);
+		while((d->fd = open(d->path, 0)) < 0 && errno == EINTR);
 		if (d->fd < 0)
 			return -1;
 		
@@ -458,7 +458,7 @@ int open_eeproms()
  */
 int close_eeproms()
 {
-	int r, err;
+	int r;
 	struct eeprom *d = first_eeprom;
 	for (d = first_eeprom; d != NULL; d = d->next)
 	{
