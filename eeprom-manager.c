@@ -113,10 +113,10 @@ int clear_after_null(char *buf, int length)
 	for (j = 0; j < length; j++)
 	{
 		// Look for null byte
-		if (*(buf + j) == '\0')
+		if (*(buf + j) == '\0' && r < 0)
 			r = j;
 		// Clear bytes after the null terminator
-		if (r)
+		if (r >= 0)
 			*(buf + j) = '\0';
 	}
 	return r;
@@ -284,7 +284,7 @@ size_t read_write_eeprom(struct eeprom *device, char op)
 			null_found = clear_after_null(pos, device->bs);
 		
 		// Done if there was a null
-		if (null_found)
+		if (null_found >= 0)
 			break;
 		
 		// Advance the position in the buffer
@@ -292,10 +292,10 @@ size_t read_write_eeprom(struct eeprom *device, char op)
 	}
 	
 	// Calculate return value
-	if (null_found)
-		retval = (i * device->bs) + null_found + 1;
+	if (null_found >= 0)
+		retval = (i * device->bs) + null_found;
 	else
-		retval = (device->count * device->bs) + 1;
+		retval = (device->count * device->bs);
 	
 	// Read / write the device->sha256 and device->wc at the end of the device
 	// TODO: This may not be required for reading, but is definitely required for writing
