@@ -344,6 +344,7 @@ size_t read_write_eeprom(struct eeprom *device, char op)
  */
 int write_eeprom(struct eeprom *device)
 {
+	char sha256[EEPROM_MANAGER_SHA_STRING_LENGTH];
 	if (device->data == NULL)
 	{
 		errno = -EINVAL;
@@ -351,12 +352,14 @@ int write_eeprom(struct eeprom *device)
 	}
 	
 	// Calculate sha256
-	char sha256[EEPROM_MANAGER_SHA_STRING_LENGTH];
 	get_sha256_string(device->data, sha256);
 	
 	// Don't write anything if the SHA hasn't changed
 	if (strcmp(device->sha256, sha256) == 0)
 		return 0;
+	
+	// Copy in the sha
+	strncpy(device->sha256, sha256, EEPROM_MANAGER_SHA_STRING_LENGTH);
 	
 	// Write data
 	device->wc++;
