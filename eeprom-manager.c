@@ -202,11 +202,20 @@ int read_write_eeprom_metadata(struct eeprom *device, char op)
 	lseek(device->fd, -1 * device->bs, SEEK_END);
 	
 	// Read the Magic
-	r = read_write_all(device, 'r', buffer, strlen(EEPROM_MANAGER_MAGIC));
-	if (r < 0)
-		return r;
-	if (strcmp(buffer, EEPROM_MANAGER_MAGIC) != 0)
-		return EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC;
+	if (op == 'r')
+	{
+		r = read_write_all(device, 'r', buffer, strlen(EEPROM_MANAGER_MAGIC));
+		if (r < 0)
+			return r;
+		if (strcmp(buffer, EEPROM_MANAGER_MAGIC) != 0)
+			return EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC;
+	}
+	else
+	{
+		r = read_write_all(device, 'w', EEPROM_MANAGER_MAGIC, strlen(EEPROM_MANAGER_MAGIC));
+		if (r < 0)
+			return r;
+	}
 	
 	// Read the SHA
 	r = read_write_all(device, op, device->sha256, EEPROM_MANAGER_SHA_STRING_LENGTH);
