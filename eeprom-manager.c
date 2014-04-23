@@ -421,7 +421,7 @@ int open_eeproms()
 	for (d = first_eeprom; d != NULL; d = d->next)
 	{
 		// Open the file
-		d->fd = open(d->path, 0);
+		while((d->fd = open(d->path, 0)) != 0 && errno == EINTR);
 		if (d->fd < 0)
 		{
 			err = errno;
@@ -458,6 +458,9 @@ int close_eeproms()
 	{
 		// Release advisory lock on file
 		while((r = flock(d->fd, LOCK_UN)) != 0 && errno == EINTR);
+		
+		// Close the file
+		while((r = close(d->fd)) != 0 && errno == EINTR);
 		if (r != 0)
 		{
 			err = errno;
@@ -466,8 +469,6 @@ int close_eeproms()
 			errno = err;
 			return -1;
 		}
-		// Close the file
-		close(d->fd);
 		d->fd = 0;
 	}
 	return 0;
