@@ -483,7 +483,7 @@ int load_conf_data()
 	
 	// Load config file
 	config = fopen(EEPROM_MANAGER_CONF_PATH, "r");
-	if (config == NULL) // TODO: return proper errno
+	if (config == NULL)
 		return -1;
 	
 	// Parse config file
@@ -493,14 +493,13 @@ int load_conf_data()
 		char path[EEPROM_MANAGER_PATH_MAX_LENGTH];
 		size_t bs, size;
 		
-		// Skip comments
-		if (fgetc(config) == '#')
+		// If fscanf fails to get 3 fields or if after getting 3 fields, the path starts with '#', skip this line
+		if ((fscanf(config, "%s %lu %lu\n", path, &bs, &size) < 3) || (path[0] == '#'))
 		{
-			while(fgetc(config) != '\n');
+			while(getc(config) != '\n');
 			continue;
 		}
 		
-		fscanf(config, "%s %lu %lu\n", path, &bs, &size);
 		new_eeprom = malloc(sizeof(struct eeprom));
 		if (new_eeprom == NULL)
 		{
