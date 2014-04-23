@@ -101,7 +101,7 @@ int clear()
 	int r, err;
 	r = eeprom_manager_clear();
 	err = errno;
-	if (!r)
+	if (r == -1)
 		ERROR("Failed to clear EEPROM: %s\n", strerror(err));
 	return r;
 }
