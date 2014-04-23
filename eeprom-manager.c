@@ -567,7 +567,6 @@ struct eeprom *find_good_eeprom()
 	struct eeprom *ret = NULL;
 	int i = 0, r = 0;
 	memset(max_wc_eeprom, 0, number_eeproms);
-	max_wc_eeprom[i++] = d;
 	for (d = first_eeprom; d != NULL; d = d->next)
 	{
 		// Load metadata for this eeprom
@@ -575,6 +574,13 @@ struct eeprom *find_good_eeprom()
 		if (r < 0)
 		{
 			// TODO: Handle error return
+		}
+		
+		// If first one parsed, add to array
+		if (max_wc_eeprom[0] == NULL)
+		{
+			max_wc_eeprom[i++] = d;
+			continue;
 		}
 		
 		// Reset max list if this one has a higher wc
@@ -591,7 +597,7 @@ struct eeprom *find_good_eeprom()
 	}
 	
 	// Find known good eeprom
-	for (i = 0; max_wc_eeprom[i] != NULL; i++)
+	for (i = 0; i < number_eeproms && max_wc_eeprom[i] != NULL; i++)
 	{
 		// verify_eeprom will call read_write_eeprom which will allocate heap
 		// storage and load the eeprom contents into device->data.
