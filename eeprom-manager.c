@@ -224,7 +224,7 @@ size_t read_write_eeprom(struct eeprom *device, char op)
 	int retval, r, null_found;
 	char *pos = NULL;
 	
-	if (op != 'r' && op != 'w')
+	if ((op != 'r' && op != 'w') || (device == NULL))
 		return -EINVAL;
 	
 	// Make sure data is allocated
