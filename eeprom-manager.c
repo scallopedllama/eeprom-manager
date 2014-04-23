@@ -574,7 +574,9 @@ int find_good_eeprom(struct eeprom *good_eeprom)
 	{
 		// Load metadata for this eeprom
 		r = read_write_eeprom_metadata(d, 'r');
-		if (r < 0)
+		if (r == EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC)
+			continue;
+		else if (r < 0)
 			return r;
 		
 		// If first one parsed, add to array
