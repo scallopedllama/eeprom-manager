@@ -18,6 +18,7 @@
 // TODO: Check all functions for situations where bad input could cause segfault and handle it.
 // TODO: Add check for EEPROM write roll-over
 // TODO: handle janson error returns
+// TODO: for api functions, return < 0 indicates error. -1 is for errno, < -1 is eeprom-manager specific errors
 
 int eeprom_manager_verbosity = 0;
 size_t eeprom_data_size = 0;
@@ -412,7 +413,7 @@ int verify_eeprom(struct eeprom *device)
  * 
  * Iterates through the eeproms list and opens all the files then gets an advisory lock on them.
  * 
- * @return 0 on success, < 0 on error
+ * @return 0 on success, < 0 on error (check errno)
  */
 int open_eeproms()
 {
@@ -420,24 +421,16 @@ int open_eeproms()
 	struct eeprom *d = first_eeprom;
 	for (d = first_eeprom; d != NULL; d = d->next)
 	{
+		// TODO: Double-check error handling. This fails everything if one EEPROM has troubles
 		// Open the file
 		while((d->fd = open(d->path, 0)) != 0 && errno == EINTR);
 		if (d->fd < 0)
-		{
-			err = errno;
-			fprintf(stderr, "Failed to open EEPROM %s: %s\n", d->path, strerror(err));
-			// TODO: Proper cleanup, or just ignore this one?
-			return -err;
-		}
+			return -1;
+		
 		// Get an advisory lock on it
 		while((r = flock(d->fd, LOCK_EX)) != 0 && errno == EINTR);
 		if (r != 0)
-		{
-			err = errno;
-			fprintf(stderr, "Failed to get lock on EEPROM %s: %s\n", d->path, strerror(err));
-			// TODO: Proper cleanup, or just ignore this one?
-			return -err;
-		}
+			return -1;
 	}
 	return 0;
 }
@@ -458,17 +451,12 @@ int close_eeproms()
 	{
 		// Release advisory lock on file
 		while((r = flock(d->fd, LOCK_UN)) != 0 && errno == EINTR);
+		// More concerned with closing the file than unlocking it (since the close should unlock it too)
 		
 		// Close the file
 		while((r = close(d->fd)) != 0 && errno == EINTR);
 		if (r != 0)
-		{
-			err = errno;
-			fprintf(stderr, "Failed to release lock on EEPROM %s: %s\n", d->path, strerror(err));
-			// TODO: Proper cleanup, or just ignore this one?
-			errno = err;
 			return -1;
-		}
 		d->fd = 0;
 	}
 	return 0;
@@ -670,7 +658,6 @@ int is_initialized()
 int eeprom_manager_initialize()
 {
 	static int initialized = 0;
-	int r = 0;
 	
 	// Don't do anything if already initialized
 	if (initialized) return 0;
@@ -679,20 +666,12 @@ int eeprom_manager_initialize()
 	if (load_conf_data() < 0)
 		return -1;
 	
-	// Open EEPROM files
-	r = open_eeproms();
-	if (r < 0)
-	{
-		// TODO: Handle bad return here
-	}
+	if (open_eeproms() < 0)
+		return -1;
 	
-	// Find the good eeprom and make sure it found one
 	good_eeprom = find_good_eeprom();
 	if (good_eeprom == NULL)
 	{
-		fprintf(stderr, "ERROR: No EEPROM devices passed sha256 checksum! All data appears to be lost.\n");
-		// TODO: Handle this error situation. negative return from here should maybe trigger a clear().
-		fprintf(stderr, "       EEPROM Manager will continue with an empty device.\n");
 		return -1;
 	}
 	
@@ -703,12 +682,8 @@ int eeprom_manager_initialize()
 		// TODO: Handle bad return here
 	}
 	
-	// Close EEPROM files
-	r = open_eeproms();
-	if (r < 0)
-	{
-		// TODO: Handle bad return here
-	}
+	if (close_eeproms() < 0)
+		return -1;
 	
 	initialized = 1;
 	return 0;
@@ -860,9 +835,7 @@ int eeprom_manager_clear()
 	
 	r = open_eeproms();
 	if (r < 0)
-	{
-		// TODO Handle error
-	}
+		return -1;
 	
 	// Write an empty JSON structure into good_eeprom, and populate that through
 	free_eeprom_data(good_eeprom);
@@ -875,9 +848,7 @@ int eeprom_manager_clear()
 	
 	r = close_eeproms();
 	if (r < 0)
-	{
-		// TODO Handle error
-	}
+		return -1;
 	
 	return r;
 }

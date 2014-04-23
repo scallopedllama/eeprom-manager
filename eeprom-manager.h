@@ -42,7 +42,9 @@ struct eeprom {
  * Loads the config file and parses its contents, building up the
  * metadata necessary to work correctly.
  * 
- * @return 0 on success, -1 on error
+ * @return 0 on success, 
+ *        -1 on system error, check errno
+ *      < -1 for EEPROM Manager errors
  */
 int eeprom_manager_initialize();
 
@@ -83,7 +85,9 @@ void eeprom_manager_set_verbosity(int level);
  * @param key the key to modify
  * @param value the value to set it to. If NULL, "" will be used.
  * @param flags bitfield of options to the set
- * @return 0 on success, -1 on failure (check errno).
+ * @return 0 on success, 
+ *        -1 on system error, check errno
+ *      < -1 for EEPROM Manager errors
  */
 int eeprom_manager_set_value(char *key, char *value, int flags);
 
@@ -97,7 +101,9 @@ int eeprom_manager_set_value(char *key, char *value, int flags);
  * @param key the key to retrieve
  * @param value the buffer into which the key's value should be written
  * @param length the length of the value buffer
- * @return 0 on success, -1 on failure (check errno).
+ * @return 0 on success, 
+ *        -1 on system error, check errno
+ *      < -1 for EEPROM Manager errors
  */
 int eeprom_manager_read_value(char *key, char *value, int length);
 
@@ -106,7 +112,9 @@ int eeprom_manager_read_value(char *key, char *value, int length);
  * 
  * DANGEROUS. Will erase all EEPROM contents without verification.
  * 
- * @return 0 on success, -1 on failure (check errno).
+ * @return 0 on success, 
+ *        -1 on system error, check errno
+ *      < -1 for EEPROM Manager errors
  */
 int eeprom_manager_clear();
 
@@ -119,7 +127,8 @@ int eeprom_manager_clear();
  * @return 2 when one or more EEPROMs did not pass but were corrected
  *         1 when all EEPROMS passed
  *         0 when no EEPROMS passed
- *        -1 on error (check errno)
+ *        -1 on system error, check errno
+ *      < -1 for EEPROM Manager errors
  */
 int eeprom_manager_verify();
 
