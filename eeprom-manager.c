@@ -246,7 +246,7 @@ size_t read_write_eeprom(struct eeprom *device, char op)
 	
 	// Clear the buffer if reading
 	if (op == 'r')
-		memset(device->data, 0, (device->bs * device->count) + 1);
+		memset(device->data, 0, eeprom_data_size);
 	// Clear the last block if writing
 	if (op == 'w')
 	{
