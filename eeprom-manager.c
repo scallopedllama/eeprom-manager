@@ -449,7 +449,7 @@ int open_eeproms()
 	{
 		// TODO: Double-check error handling. This fails everything if one EEPROM has troubles
 		// Open the file
-		while((d->fd = open(d->path, 0)) < 0 && errno == EINTR);
+		while((d->fd = open(d->path, O_RDWR | O_CLOEXEC)) < 0 && errno == EINTR);
 		if (d->fd < 0)
 			return -1;
 		
