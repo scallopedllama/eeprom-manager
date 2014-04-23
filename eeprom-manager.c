@@ -138,7 +138,7 @@ int clear_after_null(char *buf, int length)
  */
 ssize_t read_write_all(struct eeprom *device, char op, void *buf, size_t count)
 {
-	ssize_t r = 0;
+	ssize_t r = 0, ret = 0;
 	unsigned int attempts = 0;
 	
 	if (op != 'r' && op != 'w')
@@ -147,11 +147,24 @@ ssize_t read_write_all(struct eeprom *device, char op, void *buf, size_t count)
 		return -1;
 	}
 	
-	// Read and write may return less than count so keep trying until that much is read or written.
-	if (op == 'w')
-		while (((r += write(device->fd, buf, count)) < (ssize_t) count) && (attempts++ < EEPROM_MANAGER_MAX_RW_ATTEMPTS));
-	else
-		while (((r += read(device->fd, buf, count)) < (ssize_t) count) && (attempts++ < EEPROM_MANAGER_MAX_RW_ATTEMPTS));
+	while (ret < (ssize_t) count)
+	{
+		if (op == 'w')
+			r = write(device->fd, buf + ret, count - ret);
+		else
+			r = read(device->fd, buf + ret, count - ret);
+		
+		// Catch read / write failures
+		if (r < 0)
+			return r;
+		
+		// Add bytes read to the return variable
+		ret += r;
+		
+		// Have a maximum number of tries
+		if (++attempts > EEPROM_MANAGER_MAX_RW_ATTEMPTS)
+			break;
+	}
 	
 	// Make sure it was all read or written
 	if (attempts >= EEPROM_MANAGER_MAX_RW_ATTEMPTS)
@@ -162,7 +175,7 @@ ssize_t read_write_all(struct eeprom *device, char op, void *buf, size_t count)
 		return -1;
 	}
 	
-	return r;
+	return ret;
 }
 
 
