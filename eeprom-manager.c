@@ -158,6 +158,14 @@ ssize_t read_write_all(struct eeprom *device, char op, void *buf, size_t count)
 		if (r < 0)
 			return r;
 		
+		// Sync the device
+		if (op == 'w')
+		{
+			fsync(device->fd);
+			if (r < 0)
+				return r;
+		}
+		
 		// Add bytes read to the return variable
 		ret += r;
 		
