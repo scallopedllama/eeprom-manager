@@ -164,7 +164,7 @@ int info()
 	INFO("Defined EEPROM devices. All sizes are in Bytes.\n");
 	INFO("%4s\t%10s\t%5s\t%5s\t%" EEPROM_MANAGER_STR(EEPROM_MANAGER_PATH_MAX_LENGTH) "s\n", "#", "Size", "BS", "Count", "Path");
 	for (current_eeprom = eeprom_list_start; current_eeprom != NULL; current_eeprom = current_eeprom->next)
-		printf("%4u\t%10d\t%5d\t%5d\t%" EEPROM_MANAGER_STR(EEPROM_MANAGER_PATH_MAX_LENGTH) "s\n", ++i, (current_eeprom->bs * current_eeprom->count), current_eeprom->bs, current_eeprom->count, current_eeprom->path);
+		printf("%4u\t%10lu\t%5lu\t%5lu\t%" EEPROM_MANAGER_STR(EEPROM_MANAGER_PATH_MAX_LENGTH) "s\n", ++i, (current_eeprom->bs * current_eeprom->count), current_eeprom->bs, current_eeprom->count, current_eeprom->path);
 	
 	return 0;
 }
@@ -178,7 +178,7 @@ int info()
  */
 int main(int argc, char **argv)
 {
-	int r, c, zero = 0, no_add = 0, eeprom_manager_verbosity = 1;
+	int r, ret = 0, c, no_add = 0, eeprom_manager_verbosity = 1;
 	
 	if (argc < 2)
 		usage(argv[0]);
