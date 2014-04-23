@@ -19,6 +19,7 @@
 // TODO: Add check for EEPROM write roll-over
 // TODO: handle janson error returns
 // TODO: for api functions, return < 0 indicates error. -1 is for errno, < -1 is eeprom-manager specific errors
+// TODO: Make sure no error bubbling will cause a loop to exit when the error can be handled
 
 int eeprom_manager_verbosity = 0;
 size_t eeprom_data_size = 0;
@@ -133,15 +134,18 @@ int clear_after_null(char *buf, int length)
  * @param fd    File descriptor to write to
  * @param buf   Buffer to write from
  * @param count Number of bytes to write from buf to fd
- * @return 0 on success, < 0 on error
+ * @return number of bytes read / written on success, < 0 on error
  */
-size_t read_write_all(struct eeprom *device, char op, void *buf, size_t count)
+int read_write_all(struct eeprom *device, char op, void *buf, size_t count)
 {
-	size_t r = 0;
+	int r = 0;
 	unsigned int attempts = 0;
 	
 	if (op != 'r' && op != 'w')
-		return -EINVAL;
+	{
+		errno = EINVAL;
+		return -1;
+	}
 	
 	// Read and write may return less than count so keep trying until that much is read or written.
 	if (op == 'w')
@@ -154,7 +158,8 @@ size_t read_write_all(struct eeprom *device, char op, void *buf, size_t count)
 	{
 		fprintf(stderr, "ERROR: Attempted %d times to %s %lu bytes\n", EEPROM_MANAGER_MAX_RW_ATTEMPTS, (op == 'r' ? "read" : "write"), count);
 		fprintf(stderr, "       but only managed to %s %lu bytes. Aborting.\n", (op == 'r' ? "read" : "write"), r);
-		return -EIO;
+		errno = EIO;
+		return -1;
 	}
 	
 	return r;
@@ -185,21 +190,25 @@ int read_write_eeprom_metadata(struct eeprom *device, char op)
 	
 	// Read the Magic
 	r = read_write_all(device, 'r', buffer, strlen(EEPROM_MANAGER_MAGIC));
+	if (r < 0)
+		return r;
 	if (strcmp(buffer, EEPROM_MANAGER_MAGIC) != 0)
-		return -EMEDIUMTYPE;
+		return EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC;
 	
 	// Read the SHA
 	r = read_write_all(device, op, device->sha256, EEPROM_MANAGER_SHA_STRING_LENGTH);
-	if (r == 0)
-	{
-		if (op == 'w')
-			sprintf(buffer, "%010u", device->wc);
-		
-		r = read_write_all(device, op, buffer, EEPROM_MANAGER_WC_STRING_LENGTH);
-		
-		if (op == 'r')
-			sscanf(buffer, "%010u", &(device->wc));
-	}
+	if (r < 0)
+		return r;
+	
+	if (op == 'w')
+		sprintf(buffer, "%010u", device->wc);
+	
+	r = read_write_all(device, op, buffer, EEPROM_MANAGER_WC_STRING_LENGTH);
+	if (r < 0)
+		return r;
+	
+	if (op == 'r')
+		sscanf(buffer, "%010u", &(device->wc));
 	
 	return r;
 }
@@ -226,7 +235,10 @@ size_t read_write_eeprom(struct eeprom *device, char op)
 	char *pos = NULL;
 	
 	if ((op != 'r' && op != 'w') || (device == NULL))
-		return -EINVAL;
+	{
+		errno = EINVAL;
+		return -1;
+	}
 	
 	// Make sure data is allocated
 	if (op == 'r')
@@ -236,11 +248,15 @@ size_t read_write_eeprom(struct eeprom *device, char op)
 		if (device->data == NULL)
 		{
 			fprintf(stderr, "ERROR: Cannot allocate memory for EEPROM data.\n");
-			return -ENOMEM;
+			errno = ENOMEM;
+			return -1;
 		}
 	}
 	else if (device->data == NULL)
-		return -EINVAL;
+	{
+		errno = EINVAL;
+		return -1;
+	}
 	
 	// Set starting position
 	pos = device->data;
@@ -256,9 +272,7 @@ size_t read_write_eeprom(struct eeprom *device, char op)
 		lseek(device->fd, -1 * device->bs, SEEK_END);
 		r = read_write_all(device, 'w', zero_block, device->bs);
 		if (r < 0)
-		{
-			// TODO: Check for errors
-		}
+			return r;
 	}
 	
 	// Start at the beginning of the device
@@ -276,9 +290,7 @@ size_t read_write_eeprom(struct eeprom *device, char op)
 		// Do read or write
 		r = read_write_all(device, op, pos, device->bs);
 		if (r < 0)
-		{
-			// TODO: Check for errors
-		}
+			return r;
 		
 		// If reading, clear bytes after null here
 		if (op == 'r')
@@ -302,9 +314,7 @@ size_t read_write_eeprom(struct eeprom *device, char op)
 	// TODO: This may not be required for reading, but is definitely required for writing
 	r = read_write_eeprom_metadata(device, op);
 	if (r < 0)
-	{
-		// TODO: Check for errors
-	}
+		return r;
 	
 	return retval;
 }
@@ -322,7 +332,10 @@ size_t read_write_eeprom(struct eeprom *device, char op)
 int write_eeprom(struct eeprom *device)
 {
 	if (device->data == NULL)
-		return -EINVAL;
+	{
+		errno = -EINVAL;
+		return -1;
+	}
 	
 	// Calculate sha256
 	char sha256[EEPROM_MANAGER_SHA_STRING_LENGTH];
@@ -387,7 +400,7 @@ int write_all_eeproms(struct eeprom *src)
  * returing the write count on success. Frees read data if invalid.
  * 
  * @param device EEPROM device to verify
- * @return -1 on non-match or error, 0 on success
+ * @return < 0 on non-match or error, 0 on success
  */
 int verify_eeprom(struct eeprom *device)
 {
@@ -402,7 +415,7 @@ int verify_eeprom(struct eeprom *device)
 	{
 		// Don't keep invalid data around
 		free_eeprom_data(device);
-		return -1;
+		return EEPROM_MANAGER_ERROR_CHECKSUM_FAILED;
 	}
 	return 0;
 }
@@ -546,24 +559,23 @@ int load_conf_data()
  * That eeprom with the correct sha256 sum is the good_eeprom
  * which is used.
  * 
- * @return pointer to the good_eeprom or NULL on error.
+ * @param good_eeprom, pointer to eeprom device that gets set to the good one
+ * @return < 0 on error, 0 on success
  */
-struct eeprom *find_good_eeprom()
+int find_good_eeprom(struct eeprom *good_eeprom)
 {
 	// Load up all meta-data and build a list of EEPROMS with the highest wc
 	struct eeprom *d = first_eeprom;
 	struct eeprom *max_wc_eeprom[number_eeproms];
-	struct eeprom *ret = NULL;
 	int i = 0, r = 0;
 	memset(max_wc_eeprom, 0, number_eeproms);
+	good_eeprom = NULL;
 	for (d = first_eeprom; d != NULL; d = d->next)
 	{
 		// Load metadata for this eeprom
 		r = read_write_eeprom_metadata(d, 'r');
 		if (r < 0)
-		{
-			// TODO: Handle error return
-		}
+			return r;
 		
 		// If first one parsed, add to array
 		if (max_wc_eeprom[0] == NULL)
@@ -591,15 +603,19 @@ struct eeprom *find_good_eeprom()
 		// verify_eeprom will call read_write_eeprom which will allocate heap
 		// storage and load the eeprom contents into device->data.
 		// If it checks out, the data remains, if it fails validation, it fress that data.
-		// The result here is that after this loop, ret->data is the only allocated data.
+		// The result here is that after this loop, good_eeprom->data is the only allocated data.
 		if (verify_eeprom(max_wc_eeprom[i]) == 0)
 		{
-			ret = max_wc_eeprom[i];
+			good_eeprom = max_wc_eeprom[i];
 			break;
 		}
 	}
 	
-	return ret;
+	// Return that there was no good eeproms found
+	if (good_eeprom == NULL)
+		return EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND;
+	
+	return 0;
 }
 
 
@@ -647,7 +663,7 @@ int repair_all_eeproms(struct eeprom *good_eeprom)
 int is_initialized()
 {
 	// TODO: Semaphore is very required here
-	return first_eeprom != NULL && good_eeprom != NULL;
+	return first_eeprom != NULL;
 }
 
 /*
@@ -658,35 +674,39 @@ int is_initialized()
 int eeprom_manager_initialize()
 {
 	static int initialized = 0;
+	int r = 0;
 	
 	// Don't do anything if already initialized
 	if (initialized) return 0;
 	
 	// Load the data from the configuration file
-	if (load_conf_data() < 0)
-		return -1;
+	r = load_conf_data();
+	if (r < 0)
+		return r;
 	
-	if (open_eeproms() < 0)
-		return -1;
+	r = open_eeproms();
+	if (r < 0)
+		return r;
 	
-	good_eeprom = find_good_eeprom();
-	if (good_eeprom == NULL)
+	r = find_good_eeprom(good_eeprom);
+	if (r < 0)
 	{
+		int find_ret = r;
+		
 		// Preference given to the close error. The lack of a good eeprom may have been caused by
 		// something related to it.
-		if (close_eeproms() < 0)
-			return -1;
+		r = close_eeproms();
+		if (r < 0)
+			return r;
 		
-		// Return that there were no devices to use
-		return EEPROM_MANAGER_INIT_NO_GOOD_DEVICES;
+		// Return find error
+		return find_ret;
 	}
 	
 	// Repair any bad eeproms
 	r = repair_all_eeproms(good_eeprom);
 	if (r < 0)
-	{
-		// TODO: Handle bad return here
-	}
+		return r;
 	
 	if (close_eeproms() < 0)
 		return -1;
@@ -715,13 +735,7 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 {
 	int r = 0;
 	json_t *json_value = NULL;
-	if (is_initialized() == 0)
-	{
-		errno = EINVAL;
-		return -1;
-	}
-	
-	if (key == NULL || value == NULL)
+	if (is_initialized() == 0 || key == NULL || value == NULL)
 	{
 		errno = EINVAL;
 		return -1;
@@ -779,13 +793,7 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 {
 	json_t *json_value = NULL;
 	char *json_txt_value = NULL;
-	if (is_initialized() == 0)
-	{
-		errno = EINVAL;
-		return -1;
-	}
-	
-	if (key == NULL || value == NULL)
+	if (is_initialized() == 0 || key == NULL || value == NULL)
 	{
 		errno = EINVAL;
 		return -1;
@@ -841,20 +849,18 @@ int eeprom_manager_clear()
 	
 	r = open_eeproms();
 	if (r < 0)
-		return -1;
+		return r;
 	
 	// Write an empty JSON structure into good_eeprom, and populate that through
 	free_eeprom_data(first_eeprom);
 	first_eeprom->data = "{}";
 	r = write_all_eeproms(first_eeprom);
 	if (r < 0)
-	{
-		// TODO Handle error
-	}
+		return r;
 	
 	r = close_eeproms();
 	if (r < 0)
-		return -1;
+		return r;
 	
 	return r;
 }
