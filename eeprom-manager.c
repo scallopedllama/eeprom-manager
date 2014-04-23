@@ -417,18 +417,24 @@ int verify_eeprom(struct eeprom *device)
 int open_eeproms()
 {
 	int r, err;
-	struct eeprom *current_eeprom = first_eeprom;
-	while (current_eeprom->next != NULL)
+	struct eeprom *d = first_eeprom;
+	for (d = first_eeprom; d != NULL; d = d->next)
 	{
 		// Open the file
-		current_eeprom->fd = open(current_eeprom->path, 0);
-		// TODO: Make sure this opened correctly
+		d->fd = open(d->path, 0);
+		if (d->fd < 0)
+		{
+			err = errno;
+			fprintf(stderr, "Failed to open EEPROM %s: %s\n", d->path, strerror(err));
+			// TODO: Proper cleanup, or just ignore this one?
+			return -err;
+		}
 		// Get an advisory lock on it
-		while((r = flock(current_eeprom->fd, LOCK_EX)) != 0 && errno == EINTR);
+		while((r = flock(d->fd, LOCK_EX)) != 0 && errno == EINTR);
 		if (r != 0)
 		{
 			err = errno;
-			fprintf(stderr, "Failed to get lock on EEPROM %s: %s\n", current_eeprom->path, strerror(err));
+			fprintf(stderr, "Failed to get lock on EEPROM %s: %s\n", d->path, strerror(err));
 			// TODO: Proper cleanup, or just ignore this one?
 			return -err;
 		}
@@ -447,21 +453,22 @@ int open_eeproms()
 int close_eeproms()
 {
 	int r, err;
-	struct eeprom *current_eeprom = first_eeprom;
-	while (current_eeprom->next != NULL)
+	struct eeprom *d = first_eeprom;
+	for (d = first_eeprom; d != NULL; d = d->next)
 	{
 		// Release advisory lock on file
-		while((r = flock(current_eeprom->fd, LOCK_UN)) != 0 && errno == EINTR);
+		while((r = flock(d->fd, LOCK_UN)) != 0 && errno == EINTR);
 		if (r != 0)
 		{
 			err = errno;
-			fprintf(stderr, "Failed to release lock on EEPROM %s: %s\n", current_eeprom->path, strerror(err));
+			fprintf(stderr, "Failed to release lock on EEPROM %s: %s\n", d->path, strerror(err));
 			// TODO: Proper cleanup, or just ignore this one?
 			errno = err;
 			return -1;
 		}
 		// Close the file
-		close(current_eeprom->fd);
+		close(d->fd);
+		d->fd = 0;
 	}
 	return 0;
 }
