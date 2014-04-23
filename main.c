@@ -202,17 +202,34 @@ int main(int argc, char **argv)
 		}
 	}
 	
-	if (eeprom_manager_initialize() != 0)
+	r = eeprom_manager_initialize();
+	if (r == -1)
 	{
 		int err = errno;
 		ERROR("Failed to initialize EEPROM Manager: %s.\n", strerror(errno));
 		if (err == ENOENT)
 			ERROR("Could not open config file at %s\n", EEPROM_MANAGER_CONF_PATH);
-		r = -1;
+		ret = r;
 	}
-	else if (strcmp(argv[optind], "set") == 0)
-		r = set_key(argv[optind + 1], argv[optind + 2], no_add);
-	else
+	if (r == EEPROM_MANAGER_INIT_NO_GOOD_DEVICES)
+	{
+		if (!verbosity)
+			ret = r;
+		else
+		{
+			int c;
+			INFO("No EEPROM devices are initialized. Run Clear (Y/n)? ");
+			c = getchar();
+			if (c == 'y' || c == 'Y' || c == '\n')
+				clear();
+			else
+				ret = r;
+		}
+	}
+	
+	if (ret == 0 && strcmp(argv[optind], "set") == 0)
+		ret = set_key(argv[optind + 1], argv[optind + 2], no_add);
+	else if (ret == 0)
 	{
 		if (no_add)
 			WARN("Ignoring argument -n\n");
@@ -220,13 +237,13 @@ int main(int argc, char **argv)
 		// TODO: If there isn't any arguments for read, consider printing everything in key = value list
 		//       This would allow for easy fast export to bash variables
 		if (strcmp(argv[optind], "read") == 0)
-			r = read_key(argv[optind + 1]);
+			ret = read_key(argv[optind + 1]);
 		else if (strcmp(argv[optind], "clear") == 0)
-			r = clear();
+			ret = clear();
 		else if (strcmp(argv[optind], "verify") == 0)
-			r = verify();
+			ret = verify();
 		else if (strcmp(argv[optind], "info") == 0)
-			r = info();
+			ret = info();
 		else
 		{
 			ERROR("Unrecognized operation %s\n\n", argv[optind]);
@@ -235,5 +252,5 @@ int main(int argc, char **argv)
 	}
 	
 	eeprom_manager_cleanup();
-	return r;
+	return ret;
 }

@@ -672,7 +672,13 @@ int eeprom_manager_initialize()
 	good_eeprom = find_good_eeprom();
 	if (good_eeprom == NULL)
 	{
-		return -1;
+		// Preference given to the close error. The lack of a good eeprom may have been caused by
+		// something related to it.
+		if (close_eeproms() < 0)
+			return -1;
+		
+		// Return that there were no devices to use
+		return EEPROM_MANAGER_INIT_NO_GOOD_DEVICES;
 	}
 	
 	// Repair any bad eeproms

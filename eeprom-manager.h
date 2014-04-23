@@ -17,6 +17,9 @@
 
 #define EEPROM_MANAGER_SET_NO_CREATE (1 << 0)
 
+// ERRORS
+#define EEPROM_MANAGER_INIT_NO_GOOD_DEVICES (-2)
+
 /**
  * EEPROM metadata structure
  * 
