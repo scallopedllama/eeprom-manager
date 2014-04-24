@@ -669,6 +669,13 @@ int repair_all_eeproms(struct eeprom *good_eeprom)
 	struct eeprom *d = first_eeprom;
 	int i = 0;
 	int r = 0;
+	
+	if (good_eeprom == NULL)
+	{
+		errno = EINVAL;
+		return -1;
+	}
+	
 	for (d = first_eeprom; d != NULL; d = d->next)
 	{
 		if (d == good_eeprom)
