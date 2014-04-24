@@ -794,6 +794,7 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 {
 	int r = 0;
 	json_t *json_value = NULL;
+	char *json_dump_data = NULL;
 	if (is_initialized() == 0 || key == NULL || value == NULL)
 	{
 		errno = EINVAL;
@@ -835,8 +836,12 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 	}
 	
 	// Make sure there is no eeprom data, the use the reference from json_dumps
-	free_eeprom_data(good_eeprom);
-	good_eeprom->data = json_dumps(json_root, JSON_COMPACT);
+	r = malloc_eeprom_data(good_eeprom);
+	if (r < 0)
+		return -1;
+	json_dump_data = json_dumps(json_root, JSON_COMPACT);
+	// TODO: Handle json_dumps failing. Make sure it will fit into good_eeprom->data
+	strncpy(good_eeprom->data, json_dump_data, eeprom_data_size);
 	
 	// Write the new data to the eeprom
 	write_all_eeproms(good_eeprom);
