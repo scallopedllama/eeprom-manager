@@ -89,13 +89,16 @@ void push_eeprom_metadata(struct eeprom *new_eeprom)
  * @param data_buffer Text to checksum
  * @param sha256      Buffer to fill with checksum. Must be SHA_STRING_LENGTH in length.
  */
-void get_sha256_string(char *data_buffer, char *sha256)
+void get_sha256_string(char *data_buffer, char *sha256_out)
 {
 	unsigned char sha256_data[SHA256_DIGEST_LENGTH];
 	int i;
-	SHA256((unsigned char*)&data_buffer, strlen(data_buffer), sha256_data);
+	SHA256_CTX sha256;
+	SHA256_Init(&sha256);
+	SHA256_Update(&sha256, data_buffer, strlen(data_buffer));
+	SHA256_Final(sha256_data, &sha256);
 	for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
-		sprintf(sha256 + (i * 2), "%02x", sha256_data[i]);
+		sprintf(sha256_out + (i * 2), "%02x", sha256_data[i]);
 }
 
 
