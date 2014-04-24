@@ -593,20 +593,20 @@ int load_conf_data()
  * Loads metadata for all eeproms, building a list of eeproms
  * with the max wc (ideally all of them), then scans that list
  * looking for the first one with a correct sha256.
- * That eeprom with the correct sha256 sum is the good_eeprom
+ * That eeprom with the correct sha256 sum is the found_eeprom
  * which is used.
  * 
- * @param good_eeprom, pointer to eeprom device that gets set to the good one
+ * @param found_eeprom, pointer to eeprom device that gets set to the good one
  * @return < 0 on error, 0 on success
  */
-int find_good_eeprom(struct eeprom *good_eeprom)
+int find_good_eeprom(struct eeprom **found_eeprom)
 {
 	// Load up all meta-data and build a list of EEPROMS with the highest wc
 	struct eeprom *d = first_eeprom;
 	struct eeprom *max_wc_eeprom[number_eeproms];
 	int i = 0, r = 0;
-	memset(max_wc_eeprom, 0, number_eeproms);
-	good_eeprom = NULL;
+	memset(max_wc_eeprom, 0, sizeof(max_wc_eeprom));
+	*found_eeprom = (struct eeprom *) NULL;
 	for (d = first_eeprom; d != NULL; d = d->next)
 	{
 		// Load metadata for this eeprom
@@ -626,7 +626,7 @@ int find_good_eeprom(struct eeprom *good_eeprom)
 		// Reset max list if this one has a higher wc
 		if (d->wc > max_wc_eeprom[0]->wc)
 		{
-			memset(max_wc_eeprom, 0, number_eeproms);
+			memset(max_wc_eeprom, 0, sizeof(max_wc_eeprom));
 			i = 0;
 			max_wc_eeprom[i++] = d;
 		}
@@ -642,16 +642,16 @@ int find_good_eeprom(struct eeprom *good_eeprom)
 		// verify_eeprom will call read_write_eeprom which will allocate heap
 		// storage and load the eeprom contents into device->data.
 		// If it checks out, the data remains, if it fails validation, it fress that data.
-		// The result here is that after this loop, good_eeprom->data is the only allocated data.
+		// The result here is that after this loop, found_eeprom->data is the only allocated data.
 		if (verify_eeprom(max_wc_eeprom[i]) == 0)
 		{
-			good_eeprom = max_wc_eeprom[i];
+			*found_eeprom = max_wc_eeprom[i];
 			break;
 		}
 	}
 	
 	// Return that there was no good eeproms found
-	if (good_eeprom == NULL)
+	if (*found_eeprom == NULL)
 		return EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND;
 	
 	return 0;
@@ -734,7 +734,7 @@ int eeprom_manager_initialize()
 	if (r < 0)
 		return r;
 	
-	r = find_good_eeprom(good_eeprom);
+	r = find_good_eeprom(&good_eeprom);
 	if (r < 0)
 	{
 		int find_ret = r;
