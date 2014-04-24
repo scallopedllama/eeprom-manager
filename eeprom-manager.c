@@ -406,12 +406,16 @@ int write_eeprom(struct eeprom *device)
  */
 int clone_eeproms(struct eeprom *src, struct eeprom *dest)
 {
+	int r = 0;
 	// write_eeprom will only write data if sha has changed, so clear sha to make sure that happens
 	dest->sha256[0] = '\0';
 	// Make sure the written eeprom ends up with the same wc as the good eeprom
 	dest->wc = src->wc - 1;
 	dest->data = src->data;
-	return write_eeprom(dest);
+	r = write_eeprom(dest);
+	// Reset data to NULL to prevent double-free
+	dest->data = NULL;
+	return r;
 }
 
 
