@@ -43,6 +43,20 @@ void free_eeprom_data(struct eeprom *device)
 	}
 }
 
+/**
+ * Creates eeprom data
+ * 
+ * @return 0 on success, -1 on error (Check errno)
+ */
+int malloc_eeprom_data(struct eeprom *device)
+{
+	if (device->data == NULL)
+		device->data = malloc(eeprom_data_size);
+	if (device->data == NULL)
+		return -1;
+	return 0;
+}
+
 
 /**
  * Safely Clears the eeproms linked list
@@ -277,14 +291,9 @@ size_t read_write_eeprom(struct eeprom *device, char op)
 	// Make sure data is allocated
 	if (op == 'r')
 	{
-		if (device->data == NULL)
-			device->data = malloc(eeprom_data_size);
-		if (device->data == NULL)
-		{
-			fprintf(stderr, "ERROR: Cannot allocate memory for EEPROM data.\n");
-			errno = ENOMEM;
-			return -1;
-		}
+		r = malloc_eeprom_data(device);
+		if (r < 0)
+			return r;
 	}
 	else if (device->data == NULL)
 	{
@@ -898,8 +907,9 @@ int eeprom_manager_clear()
 		return r;
 	
 	// Write an empty JSON structure into good_eeprom, and populate that through
-	free_eeprom_data(first_eeprom);
-	first_eeprom->data = malloc(eeprom_data_size);
+	r = malloc_eeprom_data(first_eeprom);
+	if (r < 0)
+		return r;
 	strncpy(first_eeprom->data, "{}", eeprom_data_size);
 	write_r = write_all_eeproms(first_eeprom);
 	
