@@ -229,11 +229,11 @@ int read_write_eeprom_metadata(struct eeprom *device, char op)
 	// Read the Magic
 	if (op == 'r')
 	{
-		char buffer[strlen(EEPROM_MANAGER_MAGIC)];
-		r = read_write_all(device, 'r', buffer, strlen(EEPROM_MANAGER_MAGIC));
+		char magic_buffer[strlen(EEPROM_MANAGER_MAGIC)];
+		r = read_write_all(device, 'r', magic_buffer, strlen(EEPROM_MANAGER_MAGIC));
 		if (r < 0)
 			return r;
-		if (strcmp(buffer, EEPROM_MANAGER_MAGIC) != 0)
+		if (strncmp(magic_buffer, EEPROM_MANAGER_MAGIC, strlen(EEPROM_MANAGER_MAGIC)) != 0)
 			return EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC;
 	}
 	else
