@@ -212,6 +212,7 @@ int read_write_eeprom_metadata(struct eeprom *device, char op)
 	// Read the Magic
 	if (op == 'r')
 	{
+		char buffer[strlen(EEPROM_MANAGER_MAGIC)];
 		r = read_write_all(device, 'r', buffer, strlen(EEPROM_MANAGER_MAGIC));
 		if (r < 0)
 			return r;
