@@ -840,34 +840,61 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 	if (json_root == NULL)
 		return EEPROM_MANAGER_ERROR_JSON_PARSE_FAIL;
 	if (!json_is_object(json_root))
+	{
+		json_decref(json_root);
 		return EEPROM_MANAGER_ERROR_JSON_ROOT_NOT_OBJECT;
+	}
 	
 	// Make sure key exists if NO_CREATE is set
 	if ((flags & EEPROM_MANAGER_SET_NO_CREATE) && (json_object_get(json_root, key) == NULL))
+	{
+		json_decref(json_root);
 		return EEPROM_MANAGER_ERROR_WRITE_KEY_NOT_FOUND;
+	}
 	
 	// Make the value string
 	json_value = json_string(value);
 	if (json_value == NULL)
+	{
+		json_decref(json_root);
 		return EEPROM_MANAGER_ERROR_JANSSON_ERROR;
+	}
+	
+	// Set it
 	r = json_object_set(json_root, key, json_value);
 	if (r < 0)
+	{
+		json_decref(json_value);
+		json_decref(json_root);
 		return EEPROM_MANAGER_ERROR_JANSSON_ERROR;
+	}
 	
 	// Make sure there is no eeprom data, the use the reference from json_dumps
 	r = malloc_eeprom_data(good_eeprom);
 	if (r < 0)
+	{
+		json_decref(json_value);
+		json_decref(json_root);
 		return -1;
+	}
 	
 	// Dump the JSON data from Jansson
 	// NOTE: json_dump_data MUST be freed
 	json_dump_data = json_dumps(json_root, JSON_COMPACT);
 	if (json_dump_data == NULL)
+	{
+		json_decref(json_value);
+		json_decref(json_root);
 		return EEPROM_MANAGER_ERROR_JANSSON_ERROR;
+	}
 	
 	// Make sure the dumped data fits into the devices
 	if (strlen(json_dump_data) + 1 > eeprom_data_size)
+	{
+		json_decref(json_value);
+		json_decref(json_root);
 		return EEPROM_MANAGER_ERROR_WRITE_JSON_TOO_LONG;
+	}
 	
 	// Copy the obtained string into the eeprom structure then free it.
 	strncpy(good_eeprom->data, json_dump_data, eeprom_data_size);
@@ -918,14 +945,23 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 	if (json_root == NULL)
 		return EEPROM_MANAGER_ERROR_JSON_PARSE_FAIL;
 	if (!json_is_object(json_root))
+	{
+		json_decref(json_root);
 		return EEPROM_MANAGER_ERROR_JSON_ROOT_NOT_OBJECT;
+	}
 	
 	// Get the value
 	json_value = json_object_get(json_root, key);
 	if (json_value == NULL)
+	{
+		json_decref(json_root);
 		return EEPROM_MANAGER_ERROR_JSON_READ_KEY_NOT_FOUND;
+	}
 	if (!json_is_string(json_value))
+	{
+		json_decref(json_root);
 		return EEPROM_MANAGER_ERROR_JSON_READ_KEY_NOT_STRING;
+	}
 	
 	// Copy the value into the return variable
 	// NOTE: json_txt_value is read-only and MUST NOT be freed
