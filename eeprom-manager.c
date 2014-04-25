@@ -852,11 +852,13 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 	json_dump_data = json_dumps(json_root, JSON_COMPACT);
 	// TODO: Handle json_dumps failing. Make sure it will fit into good_eeprom->data
 	strncpy(good_eeprom->data, json_dump_data, eeprom_data_size);
+	free(json_dump_data);
 	
 	// Write the new data to the eeprom
 	write_all_eeproms(good_eeprom);
 	
 	// Clean up JSON data
+	json_decref(json_value);
 	json_decref(json_root);
 	
 	// Clean up files and release locks
