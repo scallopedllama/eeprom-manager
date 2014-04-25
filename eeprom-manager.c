@@ -7,11 +7,11 @@
 #include <jansson.h>
 #include <errno.h>
 #include <openssl/sha.h>
+#include <pthread.h>
 
 #include "eeprom-manager.h"
 
 
-// TODO: ALL THESE API CALLS AND SUCH MUST BE PROTECTED BY A SEMAPHORE TO BE THREAD SAFE!!
 // TODO: Needs check to make sure all data fits in eeprom
 // TODO: Add a level of caching to all this, need a function that checks the last block on all devices and uses previous json state if wc hasn't changed.
 // TODO: Need mechanism to remove misbehaving eeprom from pool if it's failing to write and such
@@ -23,12 +23,18 @@
 // TODO: Add option to init eeprom manager to operate non-blocking for opening files
 // TODO: Verify written data
 
+// Configuration and State Variables
 int eeprom_manager_verbosity = 0;
-size_t eeprom_data_size = 0;
+pthread_mutex_t eeprom_mutex;
+
+// EEPROM List
 int number_eeproms = 0;
+size_t eeprom_data_size = 0;
 struct eeprom *first_eeprom = NULL;
 struct eeprom *last_eeprom = NULL;
 struct eeprom *good_eeprom = NULL;
+
+// JSON Cache
 json_t *json_root = NULL;
 json_error_t json_error;
 
@@ -744,6 +750,14 @@ int eeprom_manager_initialize()
 	// Don't do anything if already initialized
 	if (initialized) return 0;
 	
+	// Init the mutex and lock it
+	r = pthread_mutex_init(&eeprom_mutex, NULL);
+	if (r != 0)
+		return -1;
+	r = pthread_mutex_lock(&eeprom_mutex);
+	if (r != 0)
+		return -1;
+	
 	// Load the data from the configuration file
 	r = load_conf_data();
 	if (r < 0)
@@ -777,16 +791,21 @@ int eeprom_manager_initialize()
 		return -1;
 	
 	initialized = 1;
+	
+	r = pthread_mutex_unlock(&eeprom_mutex);
+	if (r != 0)
+		return r;
 	return 0;
 }
 
-
+// TODO: Ignoring output from pthread_mutex_destroy
 void eeprom_manager_cleanup()
 {
 	if (is_initialized())
 	{
 		clear_eeprom_metadata();
 	}
+	pthread_mutex_destroy(&eeprom_mutex);
 }
 
 
@@ -806,6 +825,10 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 		errno = EINVAL;
 		return -1;
 	}
+	
+	r = pthread_mutex_lock(&eeprom_mutex);
+	if (r != 0)
+		return -1;
 	
 	// Open and Lock files
 	r = open_eeproms();
@@ -867,6 +890,10 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 	if (r < 0)
 		return r;
 	
+	r = pthread_mutex_unlock(&eeprom_mutex);
+	if (r != 0)
+		return r;
+	
 	return 0;
 }
 
@@ -881,6 +908,10 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 		errno = EINVAL;
 		return -1;
 	}
+	
+	r = pthread_mutex_lock(&eeprom_mutex);
+	if (r != 0)
+		return -1;
 	
 	// Open and Lock files
 	r = open_eeproms();
@@ -928,6 +959,10 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 	if (r < 0)
 		return r;
 	
+	r = pthread_mutex_unlock(&eeprom_mutex);
+	if (r != 0)
+		return r;
+	
 	return 0;
 }
 
@@ -939,6 +974,10 @@ int eeprom_manager_clear()
 		errno = EINVAL;
 		return -1;
 	}
+	
+	r = pthread_mutex_lock(&eeprom_mutex);
+	if (r != 0)
+		return -1;
 	
 	r = open_eeproms();
 	if (r < 0)
@@ -957,6 +996,10 @@ int eeprom_manager_clear()
 	if (write_r < 0)
 		return write_r;
 	
+	r = pthread_mutex_unlock(&eeprom_mutex);
+	if (r != 0)
+		return r;
+	
 	return r;
 }
 
@@ -971,6 +1014,10 @@ int eeprom_manager_verify()
 		errno = EINVAL;
 		return -1;
 	}
+	
+	r = pthread_mutex_lock(&eeprom_mutex);
+	if (r != 0)
+		return -1;
 	
 	// TODO: Need to get the all-eeproms-are-bunk return from find_good_eeprom here
 	//       ----> return 0
@@ -989,6 +1036,11 @@ int eeprom_manager_verify()
 			r = 2;
 		}
 	}
+	
+	r = pthread_mutex_unlock(&eeprom_mutex);
+	if (r != 0)
+		return r;
+	
 	return r;
 }
 
