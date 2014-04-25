@@ -41,7 +41,6 @@ void usage(char *name)
 	                "\n"
 	                "Arguments:\n"
 	                "\t-q         - Supress all output except for read value (no output without -r).\n"
-	                "\t-z         - Fills the EEPROM with zeros before writing (slow, write only).\n"
 	                "\t-n         - Do not create key on EEPROM if not present (write only).\n"
 	                "\t-v         - Enable verbosity in eeprom-manager.\n"
 	                "\n"
