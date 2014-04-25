@@ -89,7 +89,7 @@ int read_key(char *key)
 		printf("%s\n", value);
 	}
 	else if (r == -1)
-		ERROR("Failed to set value in EEPROM: %s\n", strerror(err));
+		ERROR("Failed to read value in EEPROM: %s\n", strerror(err));
 	else if (r < -1)
 		ERROR("eeprom manager error.\n");
 	return r;

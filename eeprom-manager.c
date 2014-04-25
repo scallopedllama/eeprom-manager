@@ -22,6 +22,7 @@
 // TODO: Make sure no error bubbling will cause a loop to exit when the error can be handled
 // TODO: Add option to init eeprom manager to operate non-blocking for opening files
 // TODO: Verify written data
+// TODO: Split eeprom-manager into lib + util
 
 // Configuration and State Variables
 int eeprom_manager_verbosity = 0;
