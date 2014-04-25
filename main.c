@@ -63,10 +63,12 @@ int set_key(char *key, char *value, int no_add)
 	int flags = (no_add ? EEPROM_MANAGER_SET_NO_CREATE : 0);
 	r = eeprom_manager_set_value(key, value, flags);
 	err = errno;
-	if (!r)
-		ERROR("Failed to set value in EEPROM: %s\n", strerror(err));
-	else
+	if (r >= 0)
 		INFO("Set value for key %s to %s.\n", key, value);
+	else if (r == -1)
+		ERROR("Failed to set value in EEPROM: %s\n", strerror(err));
+	else if (r < -1)
+		ERROR("eeprom manager error.\n");
 	return r;
 }
 
@@ -81,13 +83,15 @@ int read_key(char *key)
 	char value[EEPROM_MANAGER_MAX_VALUE_LENGTH];
 	r = eeprom_manager_read_value(key, value, sizeof(value));
 	err = errno;
-	if (!r)
-		ERROR("Failed to read from EEPROM: %s\n", strerror(err));
-	else
+	if (r >= 0)
 	{
 		INFO("Read value for key %s: ", key);
 		printf("%s\n", value);
 	}
+	else if (r == -1)
+		ERROR("Failed to set value in EEPROM: %s\n", strerror(err));
+	else if (r < -1)
+		ERROR("eeprom manager error.\n");
 	return r;
 }
 
