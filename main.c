@@ -251,6 +251,7 @@ int main(int argc, char **argv)
 		else
 		{
 			ERROR("Unrecognized operation %s\n\n", argv[optind]);
+			eeprom_manager_cleanup();
 			usage(argv[0]);
 		}
 	}
