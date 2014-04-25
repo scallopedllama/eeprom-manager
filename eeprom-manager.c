@@ -11,8 +11,7 @@
 
 #include "eeprom-manager.h"
 
-
-// TODO: Needs check to make sure all data fits in eeprom
+// TODO: Support all the JSON types. Currently only supports strings
 // TODO: Add a level of caching to all this, need a function that checks the last block on all devices and uses previous json state if wc hasn't changed.
 // TODO: Need mechanism to remove misbehaving eeprom from pool if it's failing to write and such
 // TODO: Check all functions for situations where bad input could cause segfault and handle it.
@@ -839,43 +838,38 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 	// Load up JSON data
 	json_root = json_loads(good_eeprom->data, 0, &json_error);
 	if (json_root == NULL)
-	{
-		// TODO: Handle JSON errors. These should really never happen if the sha checked out
-		fprintf(stderr, "JSON error on line %d: %s\n", json_error.line, json_error.text);
-		return -1;
-	}
+		return EEPROM_MANAGER_ERROR_JSON_PARSE_FAIL;
 	if (!json_is_object(json_root))
-	{
-		fprintf(stderr, "JSON error: Data is not an object.\n");
-		json_decref(json_root);
-		return -1;
-	}
+		return EEPROM_MANAGER_ERROR_JSON_ROOT_NOT_OBJECT;
 	
 	// Make sure key exists if NO_CREATE is set
-	if (flags & EEPROM_MANAGER_SET_NO_CREATE)
-	{
-		if (json_object_get(json_root, key) == NULL)
-		{
-			// TODO: set errno correctly here
-			return -1;
-		}
-	}
+	if ((flags & EEPROM_MANAGER_SET_NO_CREATE) && (json_object_get(json_root, key) == NULL))
+		return EEPROM_MANAGER_ERROR_WRITE_KEY_NOT_FOUND;
 	
 	// Make the value string
 	json_value = json_string(value);
+	if (json_value == NULL)
+		return EEPROM_MANAGER_ERROR_JANSSON_ERROR;
 	r = json_object_set(json_root, key, json_value);
 	if (r < 0)
-	{
-		// TODO: set errno correctly here
-		return -1;
-	}
+		return EEPROM_MANAGER_ERROR_JANSSON_ERROR;
 	
 	// Make sure there is no eeprom data, the use the reference from json_dumps
 	r = malloc_eeprom_data(good_eeprom);
 	if (r < 0)
 		return -1;
+	
+	// Dump the JSON data from Jansson
+	// NOTE: json_dump_data MUST be freed
 	json_dump_data = json_dumps(json_root, JSON_COMPACT);
-	// TODO: Handle json_dumps failing. Make sure it will fit into good_eeprom->data
+	if (json_dump_data == NULL)
+		return EEPROM_MANAGER_ERROR_JANSSON_ERROR;
+	
+	// Make sure the dumped data fits into the devices
+	if (strlen(json_dump_data) + 1 > eeprom_data_size)
+		return EEPROM_MANAGER_ERROR_WRITE_JSON_TOO_LONG;
+	
+	// Copy the obtained string into the eeprom structure then free it.
 	strncpy(good_eeprom->data, json_dump_data, eeprom_data_size);
 	free(json_dump_data);
 	
@@ -903,7 +897,7 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 {
 	int r = 0;
 	json_t *json_value = NULL;
-	char *json_txt_value = NULL;
+	const char *json_txt_value = NULL;
 	if (is_initialized() == 0 || key == NULL || value == NULL)
 	{
 		errno = EINVAL;
@@ -922,34 +916,20 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 	// Load up JSON data
 	json_root = json_loads(good_eeprom->data, 0, &json_error);
 	if (json_root == NULL)
-	{
-		// TODO: Handle JSON errors. These should really never happen if the sha checked out
-		fprintf(stderr, "JSON error on line %d: %s\n", json_error.line, json_error.text);
-		return -1;
-	}
+		return EEPROM_MANAGER_ERROR_JSON_PARSE_FAIL;
 	if (!json_is_object(json_root))
-	{
-		fprintf(stderr, "JSON error: Data is not an object.\n");
-		json_decref(json_root);
-		return -1;
-	}
+		return EEPROM_MANAGER_ERROR_JSON_ROOT_NOT_OBJECT;
 	
 	// Get the value
 	json_value = json_object_get(json_root, key);
 	if (json_value == NULL)
-	{
-		// TODO set proper errno
-		return -1;
-	}
+		return EEPROM_MANAGER_ERROR_JSON_READ_KEY_NOT_FOUND;
 	if (!json_is_string(json_value))
-	{
-		fprintf(stderr, "JSON error: Key's data is not a string.\n");
-		json_decref(json_root);
-		return -1;
-	}
+		return EEPROM_MANAGER_ERROR_JSON_READ_KEY_NOT_STRING;
 	
 	// Copy the value into the return variable
-	json_txt_value = (char *) json_string_value(json_value);
+	// NOTE: json_txt_value is read-only and MUST NOT be freed
+	json_txt_value = json_string_value(json_value);
 	strncpy(value, json_txt_value, length);
 	
 	// Clean up JSON data
@@ -966,6 +946,7 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 	
 	return 0;
 }
+
 
 int eeprom_manager_clear()
 {
