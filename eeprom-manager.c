@@ -1024,7 +1024,7 @@ int eeprom_manager_clear()
 int eeprom_manager_verify()
 {
 	struct eeprom *d = NULL;
-	int r = 1, t = 0;
+	int r = 0, t = 0, ret = 1;
 	
 	if (is_initialized() == 0)
 	{
@@ -1036,6 +1036,10 @@ int eeprom_manager_verify()
 	if (r != 0)
 		return -1;
 	
+	r = open_eeproms();
+	if (r < 0)
+		return r;
+	
 	// TODO: Need to get the all-eeproms-are-bunk return from find_good_eeprom here
 	//       ----> return 0
 	
@@ -1046,19 +1050,28 @@ int eeprom_manager_verify()
 			continue;
 		
 		t = verify_eeprom(d);
-		if (t < 0)
+		if (t == EEPROM_MANAGER_ERROR_CHECKSUM_FAILED)
 		{
 			t = clone_eeproms(good_eeprom, d);
-			// TODO: Handle this error return
-			r = 2;
+			ret = 2;
 		}
+		// TODO: Handle this error return
+		else if (t == -1)
+			return t;
+		
+		// Free all data allocated except for good_eeprom
+		free_eeprom_data(d);
 	}
+	
+	r = close_eeproms();
+	if (r < 0)
+		return r;
 	
 	r = pthread_mutex_unlock(&eeprom_mutex);
 	if (r != 0)
 		return r;
 	
-	return r;
+	return ret;
 }
 
 struct eeprom *eeprom_manager_info()
