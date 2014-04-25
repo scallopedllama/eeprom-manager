@@ -12,7 +12,6 @@
 #include "eeprom-manager.h"
 
 // TODO: Support all the JSON types. Currently only supports strings
-// TODO: Add a level of caching to all this, need a function that checks the last block on all devices and uses previous json state if wc hasn't changed.
 // TODO: Need mechanism to remove misbehaving eeprom from pool if it's failing to write and such
 // TODO: Check all functions for situations where bad input could cause segfault and handle it.
 // TODO: Make sure no error bubbling will cause a loop to exit when the error can be handled
@@ -723,6 +722,53 @@ int repair_all_eeproms(struct eeprom *good_eeprom)
 
 
 /**
+ * Updates device data if necessary
+ * 
+ * Saves the current sha256 and wc to a local variable
+ * then updates the metadata on the passed device.
+ * If sha256 or wc changed, it will call read_write_eeprom on that device
+ * 
+ * @param device device to check for changes
+ * @return < 0 on failure, 0 when up-to-date
+ */
+int update_eeprom_data(struct eeprom *device)
+{
+	// Get current sha and wc
+	int r = 0;
+	char prev_sha256[EEPROM_MANAGER_SHA_STRING_LENGTH];
+	unsigned int prev_wc = device->wc;
+	strncpy(prev_sha256, device->sha256, EEPROM_MANAGER_SHA_STRING_LENGTH);
+	
+	// Reload metadata
+	r = read_write_eeprom_metadata(device, 'r');
+	if (r < 0)
+		return r;
+	
+	// Reload eeprom if wc or sha changed
+	if ((prev_wc == device->wc) && (strcmp(prev_sha256, device->sha256) == 0))
+	{
+		struct eeprom *d = NULL;
+		
+		r = read_write_eeprom(device, 'r');
+		if (r < 0)
+			return r;
+		
+		// Refresh all device metadata
+		for (d = first_eeprom; d != NULL; d = d->next)
+		{
+			if (d == device)
+				continue;
+			r = read_write_eeprom_metadata(d, 'r');
+			if (r < 0)
+				return r;
+		}
+	}
+	
+	return 0;
+}
+
+
+/**
  * Returns whether eeprom manager is initialized
  * 
  * @return 1 if initialized, 0 otherwise
@@ -822,6 +868,11 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 	
 	// Open and Lock files
 	r = open_eeproms();
+	if (r < 0)
+		return r;
+	
+	// Check the EEPROM metadata for changes and pull data changes if necessary
+	r = update_eeprom_data(good_eeprom);
 	if (r < 0)
 		return r;
 	
@@ -927,6 +978,11 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 	
 	// Open and Lock files
 	r = open_eeproms();
+	if (r < 0)
+		return r;
+	
+	// Check the EEPROM metadata for changes and pull data changes if necessary
+	r = update_eeprom_data(good_eeprom);
 	if (r < 0)
 		return r;
 	
