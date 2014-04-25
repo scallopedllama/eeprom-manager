@@ -749,6 +749,11 @@ int update_eeprom_data(struct eeprom *device)
 	{
 		struct eeprom *d = NULL;
 		
+		// BUG: This implementation is not good. It assumes that good_device will always be the good_eeprom.
+		//      This does not account for one of the eeproms being updated that is not this one.
+		//      This function should _always_ update _all_ eeprom metadata then basically run
+		//      find_good_eeprom on the lot if there is a wc > the prev_wc or sha != prev_sha
+		
 		r = read_write_eeprom(device, 'r');
 		if (r < 0)
 			return r;
