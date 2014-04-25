@@ -27,6 +27,8 @@ if (verbosity) \
 	printf(format, ## args); \
 } while(0)
 
+// TODO: Print all feature
+
 void usage(char *name)
 {
 	fprintf(stderr, "Usage: %s [arguments] (operation) [operation arguments]\n"
