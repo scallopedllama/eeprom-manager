@@ -49,6 +49,10 @@ struct eeprom {
  * Loads the config file and parses its contents, building up the
  * metadata necessary to work correctly.
  * 
+ * NOTE: All EEPROM Manager API Functions will BLOCK until a lock can be made
+ *       on all the EEPROM devices. This means that if multiple programs are using
+ *       EEPROM Manager, there could be a deadlock situation.
+ * 
  * @return 0 on success, 
  *        -1 on system error, check errno
  *      < -1 for EEPROM Manager errors
@@ -60,6 +64,10 @@ int eeprom_manager_initialize();
  * Cleans up EEPROM Manager
  * 
  * Frees up data structures allocated during initialization
+ * 
+ * NOTE: All EEPROM Manager API Functions will BLOCK until a lock can be made
+ *       on all the EEPROM devices. This means that if multiple programs are using
+ *       EEPROM Manager, there could be a deadlock situation.
  */
 void eeprom_manager_cleanup();
 
@@ -86,8 +94,12 @@ void eeprom_manager_set_verbosity(int level);
  * Flags can be one or more of the following:
  * EEPROM_MANAGER_SET_NO_CREATE   - Do not create a new key if it does not exist
  * 
- * Note: key name and value are truncated at EEPROM_MANAGER_MAX_KEY_LENGTH
+ * NOTE: key name and value are truncated at EEPROM_MANAGER_MAX_KEY_LENGTH
  *       and EEPROM_MANAGER_MAX_VALUE_LENGTH respectively
+ * 
+ * NOTE: All EEPROM Manager API Functions will BLOCK until a lock can be made
+ *       on all the EEPROM devices. This means that if multiple programs are using
+ *       EEPROM Manager, there could be a deadlock situation.
  * 
  * @param key the key to modify
  * @param value the value to set it to. If NULL, "" will be used.
@@ -102,8 +114,12 @@ int eeprom_manager_set_value(char *key, char *value, int flags);
  * Reads the value of key and writes it into the value buffer, truncating
  * at length bytes.
  * 
- * Note: key name and value are truncated at EEPROM_MANAGER_MAX_KEY_LENGTH
+ * NOTE: key name and value are truncated at EEPROM_MANAGER_MAX_KEY_LENGTH
  *       and EEPROM_MANAGER_MAX_VALUE_LENGTH respectively
+ * 
+ * NOTE: All EEPROM Manager API Functions will BLOCK until a lock can be made
+ *       on all the EEPROM devices. This means that if multiple programs are using
+ *       EEPROM Manager, there could be a deadlock situation.
  * 
  * @param key the key to retrieve
  * @param value the buffer into which the key's value should be written
@@ -119,6 +135,10 @@ int eeprom_manager_read_value(char *key, char *value, int length);
  * 
  * DANGEROUS. Will erase all EEPROM contents without verification.
  * 
+ * NOTE: All EEPROM Manager API Functions will BLOCK until a lock can be made
+ *       on all the EEPROM devices. This means that if multiple programs are using
+ *       EEPROM Manager, there could be a deadlock situation.
+ * 
  * @return 0 on success, 
  *        -1 on system error, check errno
  *      < -1 for EEPROM Manager errors
@@ -130,6 +150,10 @@ int eeprom_manager_clear();
  * Verifies all EEPROM contents
  * 
  * Simply checks the SHA256 sums and returns their status
+ * 
+ * NOTE: All EEPROM Manager API Functions will BLOCK until a lock can be made
+ *       on all the EEPROM devices. This means that if multiple programs are using
+ *       EEPROM Manager, there could be a deadlock situation.
  * 
  * @return 2 when one or more EEPROMs did not pass but were corrected
  *         1 when all EEPROMS passed

@@ -20,6 +20,7 @@
 // TODO: handle janson error returns
 // TODO: for api functions, return < 0 indicates error. -1 is for errno, < -1 is eeprom-manager specific errors
 // TODO: Make sure no error bubbling will cause a loop to exit when the error can be handled
+// TODO: Add option to init eeprom manager to operate non-blocking for opening files
 
 int eeprom_manager_verbosity = 0;
 size_t eeprom_data_size = 0;
