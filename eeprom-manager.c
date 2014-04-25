@@ -158,7 +158,7 @@ ssize_t read_write_all(struct eeprom *device, char op, void *buf, size_t count)
 	ssize_t r = 0, ret = 0;
 	unsigned int attempts = 0;
 	
-	if (op != 'r' && op != 'w')
+	if ((op != 'r' && op != 'w') || (device->fd == 0))
 	{
 		errno = EINVAL;
 		return -1;
@@ -805,6 +805,11 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 		return -1;
 	}
 	
+	// Open and Lock files
+	r = open_eeproms();
+	if (r < 0)
+		return r;
+	
 	// Load up JSON data
 	json_root = json_loads(good_eeprom->data, 0, &json_error);
 	if (json_root == NULL)
@@ -853,12 +858,18 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 	// Clean up JSON data
 	json_decref(json_root);
 	
+	// Clean up files and release locks
+	r = close_eeproms();
+	if (r < 0)
+		return r;
+	
 	return 0;
 }
 
 
 int eeprom_manager_read_value(char *key, char *value, int length)
 {
+	int r = 0;
 	json_t *json_value = NULL;
 	char *json_txt_value = NULL;
 	if (is_initialized() == 0 || key == NULL || value == NULL)
@@ -866,6 +877,11 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 		errno = EINVAL;
 		return -1;
 	}
+	
+	// Open and Lock files
+	r = open_eeproms();
+	if (r < 0)
+		return r;
 	
 	// Load up JSON data
 	json_root = json_loads(good_eeprom->data, 0, &json_error);
@@ -902,6 +918,11 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 	
 	// Clean up JSON data
 	json_decref(json_root);
+	
+	// Clean up files and release locks
+	r = close_eeproms();
+	if (r < 0)
+		return r;
 	
 	return 0;
 }
