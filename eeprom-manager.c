@@ -217,12 +217,12 @@ ssize_t read_write_all(struct eeprom *device, char op, void *buf, size_t count)
  * 
  * @param op     'r' or 'w' to Read or Write respectively
  * @param device EEPROM device to load metadata for
- * @return -1 on failure, 0 on success
+ * @return -1 on failure, # bytes read or written on success
  */
 int read_write_eeprom_metadata(struct eeprom *device, char op)
 {
 	char buffer[EEPROM_MANAGER_WC_STRING_LENGTH];
-	int r = 0;
+	int r = 0, ret = 0;
 	// Read the device->sha256 and device->wc at the end of the device
 	lseek(device->fd, -1 * device->bs, SEEK_END);
 	
@@ -230,23 +230,26 @@ int read_write_eeprom_metadata(struct eeprom *device, char op)
 	if (op == 'r')
 	{
 		char magic_buffer[strlen(EEPROM_MANAGER_MAGIC)];
-		r = read_write_all(device, 'r', magic_buffer, strlen(EEPROM_MANAGER_MAGIC));
+		r = read_write_all(device, 'r', magic_buffer, strlen(EEPROM_MANAGER_MAGIC) + 1);
 		if (r < 0)
 			return r;
-		if (strncmp(magic_buffer, EEPROM_MANAGER_MAGIC, strlen(EEPROM_MANAGER_MAGIC)) != 0)
+		if (strncmp(magic_buffer, EEPROM_MANAGER_MAGIC, strlen(EEPROM_MANAGER_MAGIC) + 1) != 0)
 			return EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC;
+		ret += r;
 	}
 	else
 	{
-		r = read_write_all(device, 'w', EEPROM_MANAGER_MAGIC, strlen(EEPROM_MANAGER_MAGIC));
+		r = read_write_all(device, 'w', EEPROM_MANAGER_MAGIC, strlen(EEPROM_MANAGER_MAGIC) + 1);
 		if (r < 0)
 			return r;
+		ret += r;
 	}
 	
 	// Read the SHA
 	r = read_write_all(device, op, device->sha256, EEPROM_MANAGER_SHA_STRING_LENGTH);
 	if (r < 0)
 		return r;
+	ret += r;
 	
 	if (op == 'w')
 		sprintf(buffer, "%010u", device->wc);
@@ -254,6 +257,7 @@ int read_write_eeprom_metadata(struct eeprom *device, char op)
 	r = read_write_all(device, op, buffer, EEPROM_MANAGER_WC_STRING_LENGTH);
 	if (r < 0)
 		return r;
+	ret += r;
 	
 	if (op == 'r')
 		sscanf(buffer, "%010u", &(device->wc));
