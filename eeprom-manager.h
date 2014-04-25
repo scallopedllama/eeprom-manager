@@ -81,21 +81,6 @@ void eeprom_manager_cleanup();
 
 
 /**
- * Set EEPROM Manager verbosity
- * 
- * Call this function with a value greater than 0 to enable
- * printing to stderr / stdout from within the EEPROM manager
- * library.
- * 0 is silent (default)
- * 1 is errors only
- * 2 is errors and warnings
- * 3 is errors, warnings, and info
- * 
- * @param level verbosity level.
- */
-void eeprom_manager_set_verbosity(int level);
-
-/**
  * Sets the value of key to value.
  * 
  * The specified key is set to the specified value.

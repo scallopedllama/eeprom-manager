@@ -21,7 +21,6 @@
 // TODO: Split eeprom-manager into lib + util
 
 // Configuration and State Variables
-int eeprom_manager_verbosity = 0;
 pthread_mutex_t eeprom_mutex;
 
 // EEPROM List
@@ -803,12 +802,6 @@ void eeprom_manager_cleanup()
 		clear_eeprom_metadata();
 	}
 	pthread_mutex_destroy(&eeprom_mutex);
-}
-
-
-void eeprom_manager_set_verbosity(int level)
-{
-	   eeprom_manager_verbosity = level;
 }
 
 

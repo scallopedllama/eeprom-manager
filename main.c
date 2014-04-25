@@ -42,7 +42,6 @@ void usage(char *name)
 	                "Arguments:\n"
 	                "\t-q         - Supress all output except for read value (no output without -r).\n"
 	                "\t-n         - Do not create key on EEPROM if not present (write only).\n"
-	                "\t-v         - Enable verbosity in eeprom-manager.\n"
 	                "\n"
 	                "Exit Value\n"
 	                "Exits 0 when a value has been succcessfully written / read to / from EEPROM,\n"
@@ -181,20 +180,17 @@ int info()
  */
 int main(int argc, char **argv)
 {
-	int r, ret = 0, c, no_add = 0, eeprom_manager_verbosity = 1;
+	int r, ret = 0, c, no_add = 0;
 	
 	if (argc < 2)
 		usage(argv[0]);
 	
-	while ((c = getopt (argc, argv, "qnvh")) != -1)
+	while ((c = getopt (argc, argv, "qnh")) != -1)
 	{
 		switch (c)
 		{
 			case 'q':
 				verbosity = 0;
-				break;
-			case 'v':
-				eeprom_manager_set_verbosity(eeprom_manager_verbosity++);
 				break;
 			case 'n':
 				no_add = 1;
