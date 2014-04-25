@@ -1005,6 +1005,8 @@ int eeprom_manager_clear()
 	strncpy(first_eeprom->data, "{}", eeprom_data_size);
 	write_r = write_all_eeproms(first_eeprom);
 	
+	good_eeprom = first_eeprom;
+	
 	r = close_eeproms();
 	if (r < 0)
 		return r;
