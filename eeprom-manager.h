@@ -123,6 +123,25 @@ int eeprom_manager_set_value(char *key, char *value, int flags);
  */
 int eeprom_manager_read_value(char *key, char *value, int length);
 
+
+/**
+ * Returns a list of currently set keys in the EEPROM
+ * 
+ * Generates a NULL-terminated array of char pointers pointing to normal strings
+ * representing the keys defined in the device.
+ * 
+ * @return pointer to an array of keys allocated on the heap. Must be freed when done with. NULL on error.
+ */
+char **eeprom_manager_get_keys();
+
+
+/**
+ * Properly frees the list of set keys provided by eeprom_manager_get_keys
+ * 
+ * @param keys char ** pointer provided by eeprom_manager_get_keys
+ */
+void eeprom_manager_free_keys(char **keys);
+
 /**
  * Clears all EEPROM contents
  * 

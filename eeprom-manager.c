@@ -11,6 +11,7 @@
 
 #include "eeprom-manager.h"
 
+// TODO: Support deleting items from the EEPROM
 // TODO: Support all the JSON types. Currently only supports strings
 // TODO: Need mechanism to remove misbehaving eeprom from pool if it's failing to write and such
 // TODO: Check all functions for situations where bad input could cause segfault and handle it.
@@ -1064,6 +1065,72 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 		return r;
 	
 	return 0;
+}
+
+
+char **eeprom_manager_get_keys()
+{
+	int r = 0, i = 0;
+	size_t no_keys = 0;
+	char **ret = NULL;
+	json_t *value;
+	char *key;
+	
+	r = pthread_mutex_lock(&eeprom_mutex);
+	if (r != 0)
+		return NULL;
+	
+	if (is_initialized() == 0)
+	{
+		errno = EINVAL;
+		return NULL;
+	}
+	
+	// Do common JSON Preparation (opens eeproms, checks for data changes, populates json_root)
+	r = common_json_prep();
+	if (r < 0)
+		return NULL;
+	
+	// Get number of keys and allocate pointers for them
+	no_keys = json_object_size(json_root);
+	ret = malloc(sizeof(char*) * (no_keys + 1));
+	if (ret == NULL)
+		return ret;
+	memset(ret, 0, sizeof(char*) * (no_keys + 1));
+	
+	// Allocate strings and assign pointers correctly
+	i = 0;
+	json_object_foreach(json_root, key, value)
+	{
+		ret[i] = malloc(sizeof (char) * (strlen(key) + 1));
+		strncpy(ret[i], key, (strlen(key) + 1));
+		i++;
+	}
+	
+	// Clean up files and release locks
+	r = close_eeproms();
+	if (r < 0)
+		return NULL;
+	
+	r = pthread_mutex_unlock(&eeprom_mutex);
+	if (r != 0)
+		return NULL;
+	
+	return ret;
+}
+
+
+void eeprom_manager_free_keys(char **keys)
+{
+	int i = 0;
+	if (keys == NULL)
+		return;
+	
+	for (i = 0; keys[i] != NULL; i++)
+	{
+		free(keys[i]);
+	}
+	free(keys);
 }
 
 
