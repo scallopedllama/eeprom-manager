@@ -74,7 +74,7 @@ int set_key(char *key, char *value, int no_add)
 		if (bash)
 			INFO("%s=%s\n", key, value);
 		else
-			INFO("Set value for key %s to %s.\n", key, value);
+			INFO("%s\n", value);
 	}
 	else if (r == -1)
 		ERROR("Failed to set value in EEPROM: %s\n", strerror(err));
@@ -99,10 +99,7 @@ int read_key(char *key)
 		if (bash)
 			INFO("%s=%s\n", key, value);
 		else
-		{
-			INFO("Read value for key %s: ", key);
 			printf("%s\n", value);
-		}
 	}
 	else if (r == -1)
 		ERROR("Failed to read value in EEPROM: %s\n", strerror(err));
