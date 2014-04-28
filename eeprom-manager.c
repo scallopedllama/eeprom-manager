@@ -1001,7 +1001,7 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 	
 	// Make sure key exists if NO_CREATE is set
 	if ((flags & EEPROM_MANAGER_SET_NO_CREATE) && (json_object_get(json_root, key) == NULL))
-		return EEPROM_MANAGER_ERROR_WRITE_KEY_NOT_FOUND;
+		return EEPROM_MANAGER_ERROR_KEY_NOT_FOUND;
 	
 	// Make the value string
 	json_value = json_string(value);
@@ -1148,6 +1148,48 @@ void eeprom_manager_free_keys(char **keys)
 		free(keys[i]);
 	}
 	free(keys);
+}
+
+
+int eeprom_manager_remove_key(char *key)
+{
+	int r = 0;
+	
+	r = pthread_mutex_lock(&eeprom_mutex);
+	if (r != 0)
+		return r;
+	
+	if (is_initialized() == 0)
+	{
+		errno = EINVAL;
+		return -1;
+	}
+	
+	// Do common JSON Preparation (opens eeproms, checks for data changes, populates json_root)
+	r = common_json_prep();
+	if (r < 0)
+		return r;
+	
+	// Remove the key
+	r = json_object_del(json_root, key);
+	if (r < 0)
+		return EEPROM_MANAGER_ERROR_KEY_NOT_FOUND;
+	
+	// Write new JSON data to eeproms
+	r = write_json_to_eeprom();
+	if (r < 0)
+		return r;
+	
+	// Clean up files and release locks
+	r = close_eeproms();
+	if (r < 0)
+		return r;
+	
+	r = pthread_mutex_unlock(&eeprom_mutex);
+	if (r != 0)
+		return r;
+	
+	return 0;
 }
 
 

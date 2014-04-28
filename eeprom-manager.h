@@ -29,7 +29,7 @@
 #define EEPROM_MANAGER_ERROR_JANSSON_ERROR (-7)
 #define EEPROM_MANAGER_ERROR_JSON_READ_KEY_NOT_FOUND (-8)
 #define EEPROM_MANAGER_ERROR_JSON_READ_KEY_NOT_STRING (-9)
-#define EEPROM_MANAGER_ERROR_WRITE_KEY_NOT_FOUND  (-10)
+#define EEPROM_MANAGER_ERROR_KEY_NOT_FOUND  (-10)
 #define EEPROM_MANAGER_ERROR_WRITE_JSON_TOO_LONG (-11)
 
 /**
@@ -141,6 +141,18 @@ char **eeprom_manager_get_keys();
  * @param keys char ** pointer provided by eeprom_manager_get_keys
  */
 void eeprom_manager_free_keys(char **keys);
+
+
+/**
+ * Removes a key from the EEPROM
+ * 
+ * @param key name of key to remove
+ * @return 0 on success, 
+ *        -1 on system error, check errno
+ *      < -1 for EEPROM Manager errors
+ */
+int eeprom_manager_remove_key(char *key);
+
 
 /**
  * Clears all EEPROM contents
