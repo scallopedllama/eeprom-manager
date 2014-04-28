@@ -815,7 +815,10 @@ int common_json_prep()
 		return r;
 	// If the data has changed, free the previous json data
 	if (json_root != NULL && r == 1)
+	{
 		json_decref(json_root);
+		json_root = NULL;
+	}
 	
 	// Load up JSON data if it has never been loaded or if it has changed.
 	if (json_root == NULL)
