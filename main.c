@@ -37,7 +37,8 @@ void usage(char *name)
 	                "\n"
 	                "Operations:\n"
 	                "\tread (key)              - Read value from key in EEPROM\n"
-	                "\tset  (key) (value)      - set value to key in EEPROM\n"
+	                "\tset  (key) (value)      - Set value to key in EEPROM\n"
+	                "\tall                     - Print all defined keys\n"
 	                "\tclear                   - Erase all data from EEPROM\n"
 	                "\tverify                  - Verify EEPROM integrity\n"
 	                "\tinfo                    - Print EEPROM info\n"
@@ -104,6 +105,27 @@ int read_key(char *key)
 		ERROR("Failed to read value in EEPROM: %s\n", strerror(err));
 	else if (r < -1)
 		ERROR("eeprom manager error.\n");
+	return r;
+}
+
+
+/**
+ * Calls read_key on all defined keys in eeprom
+ * @return value from read_key
+ */
+int all()
+{
+	int i = 0, r = 0;
+	char **keys;
+	
+	keys = eeprom_manager_get_keys();
+	for (i = 0; keys[i] != NULL; i++)
+	{
+		r = read_key(keys[i]);
+		if (r < 0)
+			break;
+	}
+	eeprom_manager_free_keys(keys);
 	return r;
 }
 
@@ -259,6 +281,8 @@ int main(int argc, char **argv)
 		//       This would allow for easy fast export to bash variables
 		if (strcmp(argv[optind], "read") == 0)
 			ret = read_key(argv[optind + 1]);
+		else if (strcmp(argv[optind], "all") == 0)
+			ret = all();
 		else if (strcmp(argv[optind], "clear") == 0)
 			ret = clear();
 		else if (strcmp(argv[optind], "verify") == 0)
