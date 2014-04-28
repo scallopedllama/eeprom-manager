@@ -838,6 +838,47 @@ int common_json_prep()
 
 
 /**
+ * Updates EEPROM data to match json_root object
+ * 
+ * Dumps the json_root object to text and copies that into the
+ * good_eeprom struct, then calls write_all_eeproms to populate
+ * that data to the actual devices.
+ * @return < 0 on error, 0 on success
+ */
+int write_json_to_eeprom()
+{
+	int r = 0;
+	char *json_dump_data = NULL;
+	
+	// Make sure there is no eeprom data
+	r = malloc_eeprom_data(good_eeprom);
+	if (r < 0)
+		return -1;
+	
+	// Dump the JSON data from Jansson
+	// NOTE: json_dump_data MUST be freed
+	json_dump_data = json_dumps(json_root, JSON_COMPACT);
+	if (json_dump_data == NULL)
+		return EEPROM_MANAGER_ERROR_JANSSON_ERROR;
+	
+	// Make sure the dumped data fits into the devices
+	if (strlen(json_dump_data) + 1 > eeprom_data_size)
+		return EEPROM_MANAGER_ERROR_WRITE_JSON_TOO_LONG;
+	
+	// Copy the obtained string into the eeprom structure then free it.
+	strncpy(good_eeprom->data, json_dump_data, eeprom_data_size);
+	free(json_dump_data);
+	
+	// Write the new data to the eeprom
+	r = write_all_eeproms(good_eeprom);
+	if (r < 0)
+		return r;
+	
+	return 0;
+}
+
+
+/**
  * Returns whether eeprom manager is initialized
  * 
  * @return 1 if initialized, 0 otherwise
@@ -942,7 +983,6 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 {
 	int r = 0;
 	json_t *json_value = NULL;
-	char *json_dump_data = NULL;
 	
 	r = pthread_mutex_lock(&eeprom_mutex);
 	if (r != 0)
@@ -976,36 +1016,13 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 		return EEPROM_MANAGER_ERROR_JANSSON_ERROR;
 	}
 	
-	// Make sure there is no eeprom data
-	r = malloc_eeprom_data(good_eeprom);
+	// Write new JSON data to eeproms
+	r = write_json_to_eeprom();
 	if (r < 0)
 	{
 		json_decref(json_value);
-		return -1;
+		return r;
 	}
-	
-	// Dump the JSON data from Jansson
-	// NOTE: json_dump_data MUST be freed
-	json_dump_data = json_dumps(json_root, JSON_COMPACT);
-	if (json_dump_data == NULL)
-	{
-		json_decref(json_value);
-		return EEPROM_MANAGER_ERROR_JANSSON_ERROR;
-	}
-	
-	// Make sure the dumped data fits into the devices
-	if (strlen(json_dump_data) + 1 > eeprom_data_size)
-	{
-		json_decref(json_value);
-		return EEPROM_MANAGER_ERROR_WRITE_JSON_TOO_LONG;
-	}
-	
-	// Copy the obtained string into the eeprom structure then free it.
-	strncpy(good_eeprom->data, json_dump_data, eeprom_data_size);
-	free(json_dump_data);
-	
-	// Write the new data to the eeprom
-	write_all_eeproms(good_eeprom);
 	
 	// Clean up JSON data
 	json_decref(json_value);
