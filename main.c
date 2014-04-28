@@ -6,6 +6,8 @@
 
 #include "eeprom-manager.h"
 
+// TODO: Fix exit values from functions. A lot will be exiting -1 which isn't valid (only have unsigned 8-bit)
+
 int verbosity = 1;
 int bash = 0;
 
@@ -39,6 +41,7 @@ void usage(char *name)
 	                "\tread (key)              - Read value from key in EEPROM\n"
 	                "\tset  (key) (value)      - Set value to key in EEPROM\n"
 	                "\tall                     - Print all defined keys\n"
+	                "\tremove (key)            - Removes key from EEPROM\n"
 	                "\tclear                   - Erase all data from EEPROM\n"
 	                "\tverify                  - Verify EEPROM integrity\n"
 	                "\tinfo                    - Print EEPROM info\n"
@@ -105,6 +108,22 @@ int read_key(char *key)
 		ERROR("Failed to read value in EEPROM: %s\n", strerror(err));
 	else if (r < -1)
 		ERROR("eeprom manager error.\n");
+	return r;
+}
+
+
+/**
+ * Removes key from EEPROM
+ * @return value from eeprom_manager_remove_key
+ */
+int remove_key(char *key)
+{
+	int r = eeprom_manager_remove_key(key);
+	if (r == -1)
+		ERROR("Failed to remove key from EEPROM: %s\n", strerror(errno));
+	if (r == EEPROM_MANAGER_ERROR_KEY_NOT_FOUND)
+		ERROR("Failed to remove key from EEPROM: Key not found\n");
+	
 	return r;
 }
 
@@ -277,10 +296,10 @@ int main(int argc, char **argv)
 		if (no_add)
 			WARN("Ignoring argument -n\n");
 		
-		// TODO: If there isn't any arguments for read, consider printing everything in key = value list
-		//       This would allow for easy fast export to bash variables
 		if (strcmp(argv[optind], "read") == 0)
 			ret = read_key(argv[optind + 1]);
+		else if (strcmp(argv[optind], "remove") == 0)
+			ret = remove_key(argv[optind + 1]);
 		else if (strcmp(argv[optind], "all") == 0)
 			ret = all();
 		else if (strcmp(argv[optind], "clear") == 0)
