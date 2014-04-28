@@ -794,6 +794,46 @@ int update_eeprom_data()
 
 
 /**
+ * Performs common JSON usage preparation.
+ * 
+ * Opens up the eeprom devices, checks them for data changes, parses the json
+ * if that data has changed.
+ * 
+ * @return < 0 on failure, 0 on success.
+ */
+int common_json_prep()
+{
+	int r = 0;
+	// Open and Lock files
+	r = open_eeproms();
+	if (r < 0)
+		return r;
+	
+	// Check the EEPROM metadata for changes and pull data changes if necessary
+	r = update_eeprom_data(good_eeprom);
+	if (r < 0)
+		return r;
+	// If the data has changed, free the previous json data
+	if (json_root != NULL && r == 1)
+		json_decref(json_root);
+	
+	// Load up JSON data if it has never been loaded or if it has changed.
+	if (json_root == NULL)
+	{
+		json_root = json_loads(good_eeprom->data, 0, &json_error);
+		if (json_root == NULL)
+			return EEPROM_MANAGER_ERROR_JSON_PARSE_FAIL;
+		if (!json_is_object(json_root))
+		{
+			json_decref(json_root);
+			return EEPROM_MANAGER_ERROR_JSON_ROOT_NOT_OBJECT;
+		}
+	}
+	return 0;
+}
+
+
+/**
  * Returns whether eeprom manager is initialized
  * 
  * @return 1 if initialized, 0 otherwise
@@ -910,31 +950,10 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 		return -1;
 	}
 	
-	// Open and Lock files
-	r = open_eeproms();
+	// Do common JSON Preparation (opens eeproms, checks for data changes, populates json_root)
+	r = common_json_prep();
 	if (r < 0)
 		return r;
-	
-	// Check the EEPROM metadata for changes and pull data changes if necessary
-	r = update_eeprom_data(good_eeprom);
-	if (r < 0)
-		return r;
-	// If the data has changed, free the previous json data
-	if (json_root != NULL && r == 1)
-		json_decref(json_root);
-	
-	// Load up JSON data if it has never been loaded or if it has changed.
-	if (json_root == NULL)
-	{
-		json_root = json_loads(good_eeprom->data, 0, &json_error);
-		if (json_root == NULL)
-			return EEPROM_MANAGER_ERROR_JSON_PARSE_FAIL;
-		if (!json_is_object(json_root))
-		{
-			json_decref(json_root);
-			return EEPROM_MANAGER_ERROR_JSON_ROOT_NOT_OBJECT;
-		}
-	}
 	
 	// Make sure key exists if NO_CREATE is set
 	if ((flags & EEPROM_MANAGER_SET_NO_CREATE) && (json_object_get(json_root, key) == NULL))
@@ -1015,31 +1034,10 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 		return -1;
 	}
 	
-	// Open and Lock files
-	r = open_eeproms();
+	// Do common JSON Preparation (opens eeproms, checks for data changes, populates json_root)
+	r = common_json_prep();
 	if (r < 0)
 		return r;
-	
-	// Check the EEPROM metadata for changes and pull data changes if necessary
-	r = update_eeprom_data(good_eeprom);
-	if (r < 0)
-		return r;
-	// If the data has changed, free the previous json data
-	if (json_root != NULL && r == 1)
-		json_decref(json_root);
-	
-	// Load up JSON data if it has never been loaded or if it has changed.
-	if (json_root == NULL)
-	{
-		json_root = json_loads(good_eeprom->data, 0, &json_error);
-		if (json_root == NULL)
-			return EEPROM_MANAGER_ERROR_JSON_PARSE_FAIL;
-		if (!json_is_object(json_root))
-		{
-			json_decref(json_root);
-			return EEPROM_MANAGER_ERROR_JSON_ROOT_NOT_OBJECT;
-		}
-	}
 	
 	// Get the value
 	json_value = json_object_get(json_root, key);
