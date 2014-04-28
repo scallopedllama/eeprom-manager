@@ -7,6 +7,7 @@
 #include "eeprom-manager.h"
 
 int verbosity = 1;
+int bash = 0;
 
 #define WARN(format,args...) do { \
 	if (verbosity) { \
@@ -39,9 +40,10 @@ void usage(char *name)
 	                "\tset  (key) (value)      - set value to key in EEPROM\n"
 	                "\tclear                   - Erase all data from EEPROM\n"
 	                "\tverify                  - Verify EEPROM integrity\n"
-					"\tinfo                    - Print EEPROM info\n"
+	                "\tinfo                    - Print EEPROM info\n"
 	                "\n"
 	                "Arguments:\n"
+	                "\t-b         - Output to a bash-parsable format key=value.\n"
 	                "\t-q         - Supress all output except for read value (no output without -r).\n"
 	                "\t-n         - Do not create key on EEPROM if not present (write only).\n"
 	                "\n"
@@ -64,7 +66,12 @@ int set_key(char *key, char *value, int no_add)
 	r = eeprom_manager_set_value(key, value, flags);
 	err = errno;
 	if (r >= 0)
-		INFO("Set value for key %s to %s.\n", key, value);
+	{
+		if (bash)
+			INFO("%s=%s\n", key, value);
+		else
+			INFO("Set value for key %s to %s.\n", key, value);
+	}
 	else if (r == -1)
 		ERROR("Failed to set value in EEPROM: %s\n", strerror(err));
 	else if (r < -1)
@@ -85,8 +92,13 @@ int read_key(char *key)
 	err = errno;
 	if (r >= 0)
 	{
-		INFO("Read value for key %s: ", key);
-		printf("%s\n", value);
+		if (bash)
+			INFO("%s=%s\n", key, value);
+		else
+		{
+			INFO("Read value for key %s: ", key);
+			printf("%s\n", value);
+		}
 	}
 	else if (r == -1)
 		ERROR("Failed to read value in EEPROM: %s\n", strerror(err));
@@ -117,7 +129,7 @@ int clear()
  */
 int verify()
 {
-	int r, err;
+	int r, err, ret;
 	r = eeprom_manager_verify();
 	err = errno;
 	switch(r)
@@ -125,21 +137,26 @@ int verify()
 		case 2:
 			INFO("One or more EEPROMs did not pass verification but have since been corrected.\n");
 			INFO("Everything is ok.\n");
+			ret = 0;
 			break;
 		case 1:
 			INFO("All EEPROMs passed verification.\n");
+			ret = 0;
 			break;
 		case 0:
 			ERROR("All EEPROMs failed verification.\n");
+			ret = 1;
 			break;
 		case -1:
 			ERROR("Failed to check EEPROM: %s\n", strerror(err));
+			ret = 1;
 			break;
 		default:
 			ERROR("Unknown eeprom-manager error: %d\n", err);
+			ret = 1;
 			break;
 	}
-	return r;
+	return ret;
 }
 
 
@@ -187,7 +204,7 @@ int main(int argc, char **argv)
 	if (argc < 2)
 		usage(argv[0]);
 	
-	while ((c = getopt (argc, argv, "qnh")) != -1)
+	while ((c = getopt (argc, argv, "qnbh")) != -1)
 	{
 		switch (c)
 		{
@@ -196,6 +213,9 @@ int main(int argc, char **argv)
 				break;
 			case 'n':
 				no_add = 1;
+				break;
+			case 'b':
+				bash = 1;
 				break;
 			case 'h':
 			default:
