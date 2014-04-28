@@ -11,13 +11,11 @@
 
 #include "eeprom-manager.h"
 
-// TODO: Support deleting items from the EEPROM
 // TODO: Support all the JSON types. Currently only supports strings
 // TODO: Need mechanism to remove misbehaving eeprom from pool if it's failing to write and such
 // TODO: Check all functions for situations where bad input could cause segfault and handle it.
 // TODO: Make sure no error bubbling will cause a loop to exit when the error can be handled
 // TODO: Add option to init eeprom manager to operate non-blocking for opening files
-// TODO: Verify written data
 // TODO: Split eeprom-manager into lib + util
 
 // Configuration and State Variables
@@ -147,26 +145,33 @@ int clear_after_null(char *buf, int length)
 
 
 /**
- * Write wrapper
+ * Read / Write wrapper
  * 
- * Attempts to write the data to the fd a maximum MAX_RW_ATTEMPTS
+ * Attempts to read or write the data from / to the fd a maximum MAX_RW_ATTEMPTS
  * and drops a warning if it does not manage to do that.
  * 
- * @param fd    File descriptor to write to
- * @param buf   Buffer to write from
- * @param count Number of bytes to write from buf to fd
- * @return number of bytes read / written on success, < 0 on error
+ * If writing, will also verify the data written unless EEPROM_MANAGER_NO_VERIFY_WRITE
+ * is defined.
+ * 
+ * @param device Device to read / write write from / do
+ * @param buf    Buffer to write to / from
+ * @param count  Number of bytes to read / write from buf to fd
+ * @return       Number of bytes read / written on success, < 0 on error
  */
-ssize_t read_write_all(struct eeprom *device, char op, void *buf, size_t count)
+ssize_t read_write_all(struct eeprom *device, char op, char *buf, size_t count)
 {
 	ssize_t r = 0, ret = 0;
 	unsigned int attempts = 0;
+	off_t start_pos;
 	
 	if ((op != 'r' && op != 'w') || (device->fd == 0))
 	{
 		errno = EINVAL;
 		return -1;
 	}
+	
+	// Record where we started
+	start_pos = lseek(device->fd, 0, SEEK_CUR);
 	
 	while (ret < (ssize_t) count)
 	{
@@ -203,6 +208,22 @@ ssize_t read_write_all(struct eeprom *device, char op, void *buf, size_t count)
 		errno = EIO;
 		return -1;
 	}
+	
+#ifndef EEPROM_MANAGER_NO_VERIFY_WRITE
+	if (op == 'w')
+	{
+		char read_data[count];
+		
+		// Rewind to where we wrote the data
+		lseek(device->fd, start_pos, SEEK_SET);
+		
+		// Read that written data to a temporary buffer
+		read_write_all(device, 'r', read_data, count);
+		
+		if (strncmp(buf, read_data, count) != 0)
+			return EEPROM_MANAGER_ERROR_WRITE_VERIFY_FAILED;
+	}
+#endif
 	
 	return ret;
 }

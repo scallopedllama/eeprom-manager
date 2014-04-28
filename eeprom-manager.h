@@ -18,20 +18,17 @@
 #define EEPROM_MANAGER_SET_NO_CREATE (1 << 0)
 
 // ERRORS
-#define EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND (-2)
-
-#define EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC   (-3)
-
-#define EEPROM_MANAGER_ERROR_CHECKSUM_FAILED      (-4)
-
-#define EEPROM_MANAGER_ERROR_JSON_PARSE_FAIL (-5)
-#define EEPROM_MANAGER_ERROR_JSON_ROOT_NOT_OBJECT (-6)
-#define EEPROM_MANAGER_ERROR_JANSSON_ERROR (-7)
-#define EEPROM_MANAGER_ERROR_JSON_READ_KEY_NOT_FOUND (-8)
+#define EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND    (-2)
+#define EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC       (-3)
+#define EEPROM_MANAGER_ERROR_CHECKSUM_FAILED          (-4)
+#define EEPROM_MANAGER_ERROR_JSON_PARSE_FAIL          (-5)
+#define EEPROM_MANAGER_ERROR_JSON_ROOT_NOT_OBJECT     (-6)
+#define EEPROM_MANAGER_ERROR_JANSSON_ERROR            (-7)
+#define EEPROM_MANAGER_ERROR_JSON_READ_KEY_NOT_FOUND  (-8)
 #define EEPROM_MANAGER_ERROR_JSON_READ_KEY_NOT_STRING (-9)
-#define EEPROM_MANAGER_ERROR_KEY_NOT_FOUND  (-10)
-#define EEPROM_MANAGER_ERROR_WRITE_JSON_TOO_LONG (-11)
-
+#define EEPROM_MANAGER_ERROR_KEY_NOT_FOUND            (-10)
+#define EEPROM_MANAGER_ERROR_WRITE_JSON_TOO_LONG      (-11)
+#define EEPROM_MANAGER_ERROR_WRITE_VERIFY_FAILED      (-12)
 /**
  * EEPROM metadata structure
  * 
@@ -130,6 +127,10 @@ int eeprom_manager_read_value(char *key, char *value, int length);
  * Generates a NULL-terminated array of char pointers pointing to normal strings
  * representing the keys defined in the device.
  * 
+ * NOTE: All EEPROM Manager API Functions will BLOCK until a lock can be made
+ *       on all the EEPROM devices. This means that if multiple programs are using
+ *       EEPROM Manager, there could be a deadlock situation.
+ * 
  * @return pointer to an array of keys allocated on the heap. Must be freed when done with. NULL on error.
  */
 char **eeprom_manager_get_keys();
@@ -145,6 +146,10 @@ void eeprom_manager_free_keys(char **keys);
 
 /**
  * Removes a key from the EEPROM
+ * 
+ * NOTE: All EEPROM Manager API Functions will BLOCK until a lock can be made
+ *       on all the EEPROM devices. This means that if multiple programs are using
+ *       EEPROM Manager, there could be a deadlock situation.
  * 
  * @param key name of key to remove
  * @return 0 on success, 
