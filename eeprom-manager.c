@@ -607,26 +607,29 @@ int load_conf_data()
 	return 0;
 }
 
+
 /**
- * Finds the good eeprom to use
+ * Reloads all device metadata, returning an array of eeproms with the maximum wc
  * 
- * Loads metadata for all eeproms, building a list of eeproms
- * with the max wc (ideally all of them), then scans that list
- * looking for the first one with a correct sha256.
- * That eeprom with the correct sha256 sum is the found_eeprom
- * which is used.
+ * Scans through the eeproms and reloads their metadata while building an array
+ * containing the eeprom devices with the maximum wc value.
  * 
- * @param found_eeprom, pointer to eeprom device that gets set to the good one
- * @return < 0 on error, 0 on success
+ * @param max_wc_eeprom array of struct eeprom*. Must be number_eeproms in length.
+ * @return < 0 on failure, 0 on success.
  */
-int find_good_eeprom(struct eeprom **found_eeprom)
+int reload_all_metadata(struct eeprom **max_wc_eeprom)
 {
 	// Load up all meta-data and build a list of EEPROMS with the highest wc
 	struct eeprom *d = first_eeprom;
-	struct eeprom *max_wc_eeprom[number_eeproms];
 	int i = 0, r = 0;
-	memset(max_wc_eeprom, 0, sizeof(max_wc_eeprom));
-	*found_eeprom = (struct eeprom *) NULL;
+	
+	if (max_wc_eeprom == NULL)
+	{
+		errno = EINVAL;
+		return -1;
+	}
+	
+	memset(max_wc_eeprom, 0, (sizeof(struct eeprom *) * number_eeproms));
 	for (d = first_eeprom; d != NULL; d = d->next)
 	{
 		// Load metadata for this eeprom
@@ -646,7 +649,7 @@ int find_good_eeprom(struct eeprom **found_eeprom)
 		// Reset max list if this one has a higher wc
 		if (d->wc > max_wc_eeprom[0]->wc)
 		{
-			memset(max_wc_eeprom, 0, sizeof(max_wc_eeprom));
+			memset(max_wc_eeprom, 0, (sizeof(struct eeprom *) * number_eeproms));
 			i = 0;
 			max_wc_eeprom[i++] = d;
 		}
@@ -656,7 +659,33 @@ int find_good_eeprom(struct eeprom **found_eeprom)
 			max_wc_eeprom[i++] = d;
 	}
 	
+	if (max_wc_eeprom[0] == NULL)
+		return EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND;
+	return 0;
+}
+
+
+/**
+ * Scans the provided array of eeprom devices, determining which one is good
+ * 
+ * Looks through the array of eeprom pointers verifying each one until it finds
+ * a device that passes verification, then sets found_eeprom to that device
+ * 
+ * @param max_wc_eeprom array of struct eeprom*. Must be number_eeproms in length.
+ * @param found_eeprom, pointer to a pointer of an eeprom device that will be set to the found good one
+ * @return < 0 on error, 0 on success
+ */
+int find_good_eeprom(struct eeprom **max_wc_eeprom, struct eeprom **found_eeprom)
+{
+	int i = 0;
+	if (max_wc_eeprom == NULL)
+	{
+		errno = EINVAL;
+		return -1;
+	}
+	
 	// Find known good eeprom
+	*found_eeprom = (struct eeprom *) NULL;
 	for (i = 0; i < number_eeproms && max_wc_eeprom[i] != NULL; i++)
 	{
 		// verify_eeprom will call read_write_eeprom which will allocate heap
@@ -673,7 +702,6 @@ int find_good_eeprom(struct eeprom **found_eeprom)
 	// Return that there was no good eeproms found
 	if (*found_eeprom == NULL)
 		return EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND;
-	
 	return 0;
 }
 
@@ -724,49 +752,38 @@ int repair_all_eeproms(struct eeprom *good_eeprom)
 /**
  * Updates device data if necessary
  * 
- * Saves the current sha256 and wc to a local variable
- * then updates the metadata on the passed device.
- * If sha256 or wc changed, it will call read_write_eeprom on that device
+ * Saves the current sha256 and wc of good_eeprom to a local variable
+ * then updates the metadata on all devices.
+ * If sha256 or wc changed, it will call find_good_eeprom to reload device data.
  * 
- * @param device device to check for changes
  * @return < 0 on failure, 0 when up-to-date
  */
-int update_eeprom_data(struct eeprom *device)
+int update_eeprom_data()
 {
 	// Get current sha and wc
 	int r = 0;
+	struct eeprom *max_wc_eeprom[number_eeproms];
 	char prev_sha256[EEPROM_MANAGER_SHA_STRING_LENGTH];
-	unsigned int prev_wc = device->wc;
-	strncpy(prev_sha256, device->sha256, EEPROM_MANAGER_SHA_STRING_LENGTH);
+	unsigned int prev_wc = good_eeprom->wc;
+	strncpy(prev_sha256, good_eeprom->sha256, EEPROM_MANAGER_SHA_STRING_LENGTH);
 	
 	// Reload metadata
-	r = read_write_eeprom_metadata(device, 'r');
+	r = reload_all_metadata(max_wc_eeprom);
 	if (r < 0)
 		return r;
 	
 	// Reload eeprom if wc or sha changed
-	if ((prev_wc == device->wc) && (strcmp(prev_sha256, device->sha256) == 0))
+	if ((prev_wc == max_wc_eeprom[0]->wc) && (strcmp(prev_sha256, max_wc_eeprom[0]->sha256) == 0))
 	{
-		struct eeprom *d = NULL;
-		
-		// BUG: This implementation is not good. It assumes that good_device will always be the good_eeprom.
-		//      This does not account for one of the eeproms being updated that is not this one.
-		//      This function should _always_ update _all_ eeprom metadata then basically run
-		//      find_good_eeprom on the lot if there is a wc > the prev_wc or sha != prev_sha
-		
-		r = read_write_eeprom(device, 'r');
+		// Find the good one, which reloads its data
+		r = find_good_eeprom(max_wc_eeprom, &good_eeprom);
 		if (r < 0)
 			return r;
 		
-		// Refresh all device metadata
-		for (d = first_eeprom; d != NULL; d = d->next)
-		{
-			if (d == device)
-				continue;
-			r = read_write_eeprom_metadata(d, 'r');
-			if (r < 0)
-				return r;
-		}
+		// Repair any potentially broken devices
+		r = repair_all_eeproms(good_eeprom);
+		if (r < 0)
+			return r;
 	}
 	
 	return 0;
@@ -792,6 +809,7 @@ int is_initialized()
 int eeprom_manager_initialize()
 {
 	static int initialized = 0;
+	struct eeprom *max_wc_eeprom[number_eeproms];
 	int r = 0;
 	
 	// Don't do anything if already initialized
@@ -814,7 +832,22 @@ int eeprom_manager_initialize()
 	if (r < 0)
 		return r;
 	
-	r = find_good_eeprom(&good_eeprom);
+	r = reload_all_metadata(max_wc_eeprom);
+	if (r < 0)
+	{
+		int reload_ret = r;
+		
+		// Preference given to the close error. The lack of a good eeprom may have been caused by
+		// something related to it.
+		r = close_eeproms();
+		if (r < 0)
+			return r;
+		
+		// Return find error
+		return reload_ret;
+	}
+	
+	r = find_good_eeprom(max_wc_eeprom, &good_eeprom);
 	if (r < 0)
 	{
 		int find_ret = r;
