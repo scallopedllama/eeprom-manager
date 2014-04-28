@@ -797,7 +797,6 @@ int update_eeprom_data()
  */
 int is_initialized()
 {
-	// TODO: Semaphore is very required here
 	return first_eeprom != NULL;
 }
 
@@ -894,15 +893,16 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 	int r = 0;
 	json_t *json_value = NULL;
 	char *json_dump_data = NULL;
+	
+	r = pthread_mutex_lock(&eeprom_mutex);
+	if (r != 0)
+		return -1;
+	
 	if (is_initialized() == 0 || key == NULL || value == NULL)
 	{
 		errno = EINVAL;
 		return -1;
 	}
-	
-	r = pthread_mutex_lock(&eeprom_mutex);
-	if (r != 0)
-		return -1;
 	
 	// Open and Lock files
 	r = open_eeproms();
@@ -1004,15 +1004,15 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 	int r = 0;
 	json_t *json_value = NULL;
 	const char *json_txt_value = NULL;
+	r = pthread_mutex_lock(&eeprom_mutex);
+	if (r != 0)
+		return -1;
+	
 	if (is_initialized() == 0 || key == NULL || value == NULL)
 	{
 		errno = EINVAL;
 		return -1;
 	}
-	
-	r = pthread_mutex_lock(&eeprom_mutex);
-	if (r != 0)
-		return -1;
 	
 	// Open and Lock files
 	r = open_eeproms();
@@ -1071,15 +1071,16 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 int eeprom_manager_clear()
 {
 	int r = 0, write_r = 0;
+	
+	r = pthread_mutex_lock(&eeprom_mutex);
+	if (r != 0)
+		return -1;
+	
 	if (is_initialized() == 0)
 	{
 		errno = EINVAL;
 		return -1;
 	}
-	
-	r = pthread_mutex_lock(&eeprom_mutex);
-	if (r != 0)
-		return -1;
 	
 	r = open_eeproms();
 	if (r < 0)
@@ -1113,15 +1114,15 @@ int eeprom_manager_verify()
 	struct eeprom *d = NULL;
 	int r = 0, t = 0, ret = 1;
 	
+	r = pthread_mutex_lock(&eeprom_mutex);
+	if (r != 0)
+		return -1;
+	
 	if (is_initialized() == 0)
 	{
 		errno = EINVAL;
 		return -1;
 	}
-	
-	r = pthread_mutex_lock(&eeprom_mutex);
-	if (r != 0)
-		return -1;
 	
 	r = open_eeproms();
 	if (r < 0)
@@ -1163,12 +1164,16 @@ int eeprom_manager_verify()
 
 struct eeprom *eeprom_manager_info()
 {
+	struct eeprom *ret = NULL;
+	pthread_mutex_lock(&eeprom_mutex);
 	if (is_initialized() == 0)
 	{
 		errno = EINVAL;
 		return NULL;
 	}
+	ret = first_eeprom;
 	
-	return first_eeprom;
+	pthread_mutex_unlock(&eeprom_mutex);
+	return ret;
 }
 
