@@ -37,7 +37,8 @@ void usage(char *name)
 	                "\n"
 	                "Operations:\n"
 	                "\tread (key)              - Read value from key in EEPROM\n"
-	                "\tset  (key) (value)      - Set value to key in EEPROM\n"
+	                "\tset  (key) (value) ...  - Set value(s) to key(s) in EEPROM\n"
+	                "\t                          Set multiple values by repeating (key) (value) (key) (value)...\n"
 	                "\tall                     - Print all defined keys\n"
 	                "\tremove (key)            - Removes key from EEPROM\n"
 	                "\tclear                   - Erase all data from EEPROM\n"
@@ -285,7 +286,11 @@ int main(int argc, char **argv)
 	}
 	
 	if (ret == 0 && strcmp(argv[optind], "set") == 0)
-		ret = set_key(argv[optind + 1], argv[optind + 2], no_add);
+	{
+		int i;
+		for (i = optind + 1; i < argc; i += 2)
+			ret = set_key(argv[i], argv[i + 1], no_add);
+	}
 	else if (ret == 0)
 	{
 		if (no_add)
