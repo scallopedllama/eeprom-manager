@@ -28,8 +28,6 @@ if (verbosity) \
 	printf(format, ## args); \
 } while(0)
 
-// TODO: Print all feature
-
 void usage(char *name)
 {
 	fprintf(stderr, "Usage: %s [arguments] (operation) [operation arguments]\n"
@@ -78,7 +76,7 @@ int set_key(char *key, char *value, int no_add)
 	else if (r == -1)
 		ERROR("Failed to set value in EEPROM: %s\n", strerror(err));
 	else if (r < -1)
-		ERROR("eeprom manager error.\n");
+		ERROR("EEPROM Manager error: %s\n", eeprom_manager_decode_error(r));
 	return r * -1;
 }
 
@@ -103,7 +101,7 @@ int read_key(char *key)
 	else if (r == -1)
 		ERROR("Failed to read value in EEPROM: %s\n", strerror(err));
 	else if (r < -1)
-		ERROR("eeprom manager error.\n");
+		ERROR("EEPROM Manager error: %s\n", eeprom_manager_decode_error(r));
 	return r * -1;
 }
 
@@ -117,8 +115,8 @@ int remove_key(char *key)
 	int r = eeprom_manager_remove_key(key);
 	if (r == -1)
 		ERROR("Failed to remove key from EEPROM: %s\n", strerror(errno));
-	if (r == EEPROM_MANAGER_ERROR_KEY_NOT_FOUND)
-		ERROR("Failed to remove key from EEPROM: Key not found\n");
+	else if (r < -1)
+		ERROR("EEPROM Manager error: %s\n", eeprom_manager_decode_error(r));
 	
 	return r * -1;
 }
@@ -156,6 +154,8 @@ int clear()
 	err = errno;
 	if (r == -1)
 		ERROR("Failed to clear EEPROM: %s\n", strerror(err));
+	else if (r < -1)
+		ERROR("EEPROM Manager error: %s\n", eeprom_manager_decode_error(r));
 	return r * -1;
 }
 
@@ -189,7 +189,7 @@ int verify()
 			ret = 1;
 			break;
 		default:
-			ERROR("Unknown eeprom-manager error: %d\n", r);
+			ERROR("EEPROM Manager error: %s\n", eeprom_manager_decode_error(r));
 			ret = r * -1;
 			break;
 	}
@@ -272,6 +272,11 @@ int main(int argc, char **argv)
 	else if (r == EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND)
 	{
 		INFO("No EEPROM devices are initialized. Re-run with clear command.");
+		ret = r;
+	}
+	else if (r < -1)
+	{
+		ERROR("EEPROM Manager error: %s\n", eeprom_manager_decode_error(r));
 		ret = r;
 	}
 	else if (strcmp(argv[optind], "set") == 0)

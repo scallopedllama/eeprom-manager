@@ -234,7 +234,7 @@ ssize_t read_write_all(struct eeprom *device, char op, char *buf, size_t count)
 		read_write_all(device, 'r', read_data, count);
 		
 		if (strncmp(buf, read_data, count) != 0)
-			return EEPROM_MANAGER_ERROR_WRITE_VERIFY_FAILED;
+			return -1 * EEPROM_MANAGER_ERROR_WRITE_VERIFY_FAILED;
 	}
 #endif
 	
@@ -278,7 +278,7 @@ int read_write_eeprom_metadata(struct eeprom *device, char op)
 		if (r < 0)
 			return r;
 		if (strncmp(magic_buffer, EEPROM_MANAGER_MAGIC, strlen(EEPROM_MANAGER_MAGIC) + 1) != 0)
-			return EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC;
+			return -1 * EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC;
 		ret += r;
 	}
 	else
@@ -519,7 +519,7 @@ int verify_eeprom(struct eeprom *device)
 	{
 		// Don't keep invalid data around
 		free_eeprom_data(device);
-		return EEPROM_MANAGER_ERROR_CHECKSUM_FAILED;
+		return -1 * EEPROM_MANAGER_ERROR_CHECKSUM_FAILED;
 	}
 	return 0;
 }
@@ -538,7 +538,6 @@ int open_eeproms()
 	struct eeprom *d = first_eeprom;
 	for (d = first_eeprom; d != NULL; d = d->next)
 	{
-		// TODO: Double-check error handling. This fails everything if one EEPROM has troubles
 		// Open the file
 		while((d->fd = open(d->path, O_RDWR | O_CLOEXEC)) < 0 && errno == EINTR);
 		if (d->fd < 0)
@@ -621,7 +620,6 @@ int load_conf_data()
 			return -1;
 		}
 		
-		// TODO: Best way to check for this?
 		if (bs < EEPROM_MANAGER_METADATA_LENGTH)
 		{
 			fprintf(stderr, "ERROR: bs is too small to store SHA and write count in last block. Skipping...\n");
@@ -681,7 +679,7 @@ int reload_all_metadata(struct eeprom **max_wc_eeprom)
 	{
 		// Load metadata for this eeprom
 		r = read_write_eeprom_metadata(d, 'r');
-		if (r == EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC)
+		if (r == -1 * EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC)
 			continue;
 		else if (r < 0)
 			return r;
@@ -707,7 +705,7 @@ int reload_all_metadata(struct eeprom **max_wc_eeprom)
 	}
 	
 	if (max_wc_eeprom[0] == NULL)
-		return EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND;
+		return -1 * EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND;
 	return 0;
 }
 
@@ -748,7 +746,7 @@ int find_good_eeprom(struct eeprom **max_wc_eeprom, struct eeprom **found_eeprom
 	
 	// Return that there was no good eeproms found
 	if (*found_eeprom == NULL)
-		return EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND;
+		return -1 * EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND;
 	return 0;
 }
 
@@ -784,7 +782,6 @@ int repair_all_eeproms(struct eeprom *good_eeprom)
 		{
 			fprintf(stderr, "WARNING: Repairing EEPROM %d because its write-count or sha256 was incorrect.\n", i);
 			r = clone_eeproms(good_eeprom, d);
-			// TODO: Handle this error gracefully.
 			if (r < 0)
 				return r;
 		}
@@ -820,7 +817,7 @@ int update_eeprom_data()
 		return r;
 	
 	// Reload eeprom if wc or sha changed
-	if ((prev_wc == max_wc_eeprom[0]->wc) && (strcmp(prev_sha256, max_wc_eeprom[0]->sha256) == 0))
+	if ((prev_wc != max_wc_eeprom[0]->wc) || (strcmp(prev_sha256, max_wc_eeprom[0]->sha256) != 0))
 	{
 		// Find the good one, which reloads its data
 		r = find_good_eeprom(max_wc_eeprom, &good_eeprom);
@@ -872,11 +869,11 @@ int common_json_prep()
 	{
 		json_root = json_loads(good_eeprom->data, 0, &json_error);
 		if (json_root == NULL)
-			return EEPROM_MANAGER_ERROR_JSON_PARSE_FAIL;
+			return -1 * EEPROM_MANAGER_ERROR_JSON_PARSE_FAIL;
 		if (!json_is_object(json_root))
 		{
 			json_decref(json_root);
-			return EEPROM_MANAGER_ERROR_JSON_ROOT_NOT_OBJECT;
+			return -1 * EEPROM_MANAGER_ERROR_JSON_ROOT_NOT_OBJECT;
 		}
 	}
 	return 0;
@@ -905,11 +902,11 @@ int write_json_to_eeprom()
 	// NOTE: json_dump_data MUST be freed
 	json_dump_data = json_dumps(json_root, JSON_COMPACT);
 	if (json_dump_data == NULL)
-		return EEPROM_MANAGER_ERROR_JANSSON_ERROR;
+		return -1 * EEPROM_MANAGER_ERROR_JANSSON_ERROR;
 	
 	// Make sure the dumped data fits into the devices
 	if (strlen(json_dump_data) + 1 > eeprom_data_size)
-		return EEPROM_MANAGER_ERROR_WRITE_JSON_TOO_LONG;
+		return -1 * EEPROM_MANAGER_ERROR_WRITE_JSON_TOO_LONG;
 	
 	// Copy the obtained string into the eeprom structure then free it.
 	strncpy(good_eeprom->data, json_dump_data, eeprom_data_size);
@@ -1047,19 +1044,19 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 	
 	// Make sure key exists if NO_CREATE is set
 	if ((flags & EEPROM_MANAGER_SET_NO_CREATE) && (json_object_get(json_root, key) == NULL))
-		return EEPROM_MANAGER_ERROR_KEY_NOT_FOUND;
+		return -1 * EEPROM_MANAGER_ERROR_JSON_KEY_NOT_FOUND;
 	
 	// Make the value string
 	json_value = json_string(value);
 	if (json_value == NULL)
-		return EEPROM_MANAGER_ERROR_JANSSON_ERROR;
+		return -1 * EEPROM_MANAGER_ERROR_JANSSON_ERROR;
 	
 	// Set it
 	r = json_object_set(json_root, key, json_value);
 	if (r < 0)
 	{
 		json_decref(json_value);
-		return EEPROM_MANAGER_ERROR_JANSSON_ERROR;
+		return -1 * EEPROM_MANAGER_ERROR_JANSSON_ERROR;
 	}
 	
 	// Write new JSON data to eeproms
@@ -1109,9 +1106,9 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 	// Get the value
 	json_value = json_object_get(json_root, key);
 	if (json_value == NULL)
-		return EEPROM_MANAGER_ERROR_JSON_READ_KEY_NOT_FOUND;
+		return -1 * EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND;
 	if (!json_is_string(json_value))
-		return EEPROM_MANAGER_ERROR_JSON_READ_KEY_NOT_STRING;
+		return -1 * EEPROM_MANAGER_ERROR_JSON_KEY_NOT_STRING;
 	
 	// Copy the value into the return variable
 	// NOTE: json_txt_value is read-only and MUST NOT be freed
@@ -1219,7 +1216,7 @@ int eeprom_manager_remove_key(char *key)
 	// Remove the key
 	r = json_object_del(json_root, key);
 	if (r < 0)
-		return EEPROM_MANAGER_ERROR_KEY_NOT_FOUND;
+		return -1 * EEPROM_MANAGER_ERROR_JSON_KEY_NOT_FOUND;
 	
 	// Write new JSON data to eeproms
 	r = write_json_to_eeprom();
@@ -1279,9 +1276,9 @@ int eeprom_manager_clear()
 	return r;
 }
 
-// TODO: Support -1 and 0 returns for this function
 int eeprom_manager_verify()
 {
+	struct eeprom *max_wc_eeprom[number_eeproms];
 	struct eeprom *d = NULL;
 	int r = 0, t = 0, ret = 1;
 	
@@ -1299,8 +1296,17 @@ int eeprom_manager_verify()
 	if (r < 0)
 		return r;
 	
-	// TODO: Need to get the all-eeproms-are-bunk return from find_good_eeprom here
-	//       ----> return 0
+	// Reload metadata
+	r = reload_all_metadata(max_wc_eeprom);
+	if (r == -1 * EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND)
+		return 0;
+	else if (r < 0)
+		return r;
+	
+	// Find the good eeprom
+	r = find_good_eeprom(max_wc_eeprom, &good_eeprom);
+	if (r < 0)
+		return r;
 	
 	for (d = first_eeprom; d != NULL; d = d->next)
 	{
@@ -1309,13 +1315,12 @@ int eeprom_manager_verify()
 			continue;
 		
 		t = verify_eeprom(d);
-		if (t == EEPROM_MANAGER_ERROR_CHECKSUM_FAILED)
+		if (t == -1 * EEPROM_MANAGER_ERROR_CHECKSUM_FAILED)
 		{
 			t = clone_eeproms(good_eeprom, d);
 			ret = 2;
 		}
-		// TODO: Handle this error return
-		else if (t == -1)
+		else if (t < 0)
 			return t;
 		
 		// Free all data allocated except for good_eeprom

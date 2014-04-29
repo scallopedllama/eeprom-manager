@@ -16,19 +16,32 @@
 #define EEPROM_MANAGER_CONF_PATH         "/etc/eeprom-manager.conf"
 
 #define EEPROM_MANAGER_SET_NO_CREATE (1 << 0)
+#define eeprom_manager_errors X(EEPROM_MANAGER_SUCCESS,                        "Success")                                   \
+                              X(EEPROM_MANAGER_ERROR_ERRNO,                    "Check Errno")                               \
+                              X(EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND,    "No good devices found")                     \
+                              X(EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC,       "Metadata has bad magic")                    \
+                              X(EEPROM_MANAGER_ERROR_CHECKSUM_FAILED,          "Device checksum does not match")            \
+                              X(EEPROM_MANAGER_ERROR_JSON_PARSE_FAIL,          "Failed to parse JSON")                      \
+                              X(EEPROM_MANAGER_ERROR_JSON_ROOT_NOT_OBJECT,     "JSON Root is not an object")                \
+                              X(EEPROM_MANAGER_ERROR_JANSSON_ERROR,            "Jansson error")                             \
+                              X(EEPROM_MANAGER_ERROR_JSON_KEY_NOT_FOUND,       "JSON key not found")                        \
+                              X(EEPROM_MANAGER_ERROR_JSON_KEY_NOT_STRING,      "JSON value not a string")                   \
+                              X(EEPROM_MANAGER_ERROR_WRITE_JSON_TOO_LONG,      "JSON string will not fit in EEPROM")        \
+                              X(EEPROM_MANAGER_ERROR_WRITE_VERIFY_FAILED,      "Written data did not match read back data")
 
 // ERRORS
-#define EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND    (-2)
-#define EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC       (-3)
-#define EEPROM_MANAGER_ERROR_CHECKSUM_FAILED          (-4)
-#define EEPROM_MANAGER_ERROR_JSON_PARSE_FAIL          (-5)
-#define EEPROM_MANAGER_ERROR_JSON_ROOT_NOT_OBJECT     (-6)
-#define EEPROM_MANAGER_ERROR_JANSSON_ERROR            (-7)
-#define EEPROM_MANAGER_ERROR_JSON_READ_KEY_NOT_FOUND  (-8)
-#define EEPROM_MANAGER_ERROR_JSON_READ_KEY_NOT_STRING (-9)
-#define EEPROM_MANAGER_ERROR_KEY_NOT_FOUND            (-10)
-#define EEPROM_MANAGER_ERROR_WRITE_JSON_TOO_LONG      (-11)
-#define EEPROM_MANAGER_ERROR_WRITE_VERIFY_FAILED      (-12)
+enum EEPROM_MANAGER_ERROR
+{
+#define X(a, b) a,
+	eeprom_manager_errors
+#undef X
+};
+const char *EEPROM_MANAGER_ERROR_STRINGS[] = {
+#define X(a, b) b,
+	eeprom_manager_errors
+#undef X
+};
+
 /**
  * EEPROM metadata structure
  * 
@@ -199,5 +212,25 @@ int eeprom_manager_verify();
  * @return head of a linked list of loaded EEPROM data or NULL on error.
  */
 struct eeprom * eeprom_manager_info();
+
+
+/**
+ * Returns a char * representing the provided error code.
+ * 
+ * Will return the correct char* in the EEPROM_MANAGER_ERROR_STRINGS array,
+ * taking the negative index if necessary.
+ * Should work for all returns from eeprom manager, including success.
+ * 
+ * @return string represeting error or NULL on error
+ */
+inline const char * eeprom_manager_decode_error(int error)
+{
+	static int num_errors = sizeof(EEPROM_MANAGER_ERROR_STRINGS) / sizeof(char *);
+	if ((error >= num_errors) || (error <= -1 * num_errors))
+		return NULL;
+		
+	if (error < 0) error *= -1;
+	return EEPROM_MANAGER_ERROR_STRINGS[error];
+}
 
 #endif
