@@ -15,7 +15,6 @@
 // TODO: Need mechanism to remove misbehaving eeprom from pool if it's failing to write and such
 // TODO: Add option to init eeprom manager to operate non-blocking for opening files
 
-// TODO: Check all functions for situations where bad input could cause segfault and handle it.
 // TODO: Make sure no error bubbling will cause a loop to exit when the error can be handled
 
 // Configuration and State Variables
@@ -38,6 +37,8 @@ json_error_t json_error;
  */
 void free_eeprom_data(struct eeprom *device)
 {
+	if (device == NULL)
+		return;
 	if (device->data != NULL)
 	{
 		free(device->data);
@@ -81,6 +82,9 @@ void clear_eeprom_metadata()
  */
 void push_eeprom_metadata(struct eeprom *new_eeprom)
 {
+	if (new_eeprom == NULL)
+		return;
+	
 	new_eeprom->next = NULL;
 	new_eeprom->fd = 0;
 	
@@ -107,6 +111,9 @@ void push_eeprom_metadata(struct eeprom *new_eeprom)
  */
 void get_sha256_string(char *data_buffer, char *sha256_out)
 {
+	if (data_buffer == NULL || sha256_out == NULL)
+		return;
+	
 	unsigned char sha256_data[SHA256_DIGEST_LENGTH];
 	int i;
 	SHA256_CTX sha256;
@@ -130,6 +137,12 @@ void get_sha256_string(char *data_buffer, char *sha256_out)
  */
 int clear_after_null(char *buf, int length)
 {
+	if (buf == NULL && length > 0)
+	{
+		errno = EINVAL;
+		return -1;
+	}
+	
 	int j, r = -1;
 	for (j = 0; j < length; j++)
 	{
@@ -164,7 +177,7 @@ ssize_t read_write_all(struct eeprom *device, char op, char *buf, size_t count)
 	unsigned int attempts = 0;
 	off_t start_pos;
 	
-	if ((op != 'r' && op != 'w') || (device->fd == 0))
+	if ((device == NULL) || (device->fd == 0) || (buf == NULL) || (op != 'r' && op != 'w'))
 	{
 		errno = EINVAL;
 		return -1;
@@ -246,6 +259,12 @@ ssize_t read_write_all(struct eeprom *device, char op, char *buf, size_t count)
  */
 int read_write_eeprom_metadata(struct eeprom *device, char op)
 {
+	if (device == NULL || (op != 'r' && op != 'w'))
+	{
+		errno = EINVAL;
+		return -1;
+	}
+
 	char buffer[EEPROM_MANAGER_WC_STRING_LENGTH];
 	int r = 0, ret = 0;
 	// Read the device->sha256 and device->wc at the end of the device
@@ -311,7 +330,7 @@ size_t read_write_eeprom(struct eeprom *device, char op)
 	int retval, r, null_found;
 	char *pos = NULL;
 	
-	if ((op != 'r' && op != 'w') || (device == NULL))
+	if ((device == NULL) || (op != 'r' && op != 'w'))
 	{
 		errno = EINVAL;
 		return -1;
@@ -404,7 +423,7 @@ size_t read_write_eeprom(struct eeprom *device, char op)
 int write_eeprom(struct eeprom *device)
 {
 	char sha256[EEPROM_MANAGER_SHA_STRING_LENGTH];
-	if (device->data == NULL)
+	if ((device == NULL) || (device->data == NULL))
 	{
 		errno = -EINVAL;
 		return -1;
@@ -435,6 +454,12 @@ int write_eeprom(struct eeprom *device)
  */
 int clone_eeproms(struct eeprom *src, struct eeprom *dest)
 {
+	if ((src == NULL) || (dest == NULL))
+	{
+		errno = -EINVAL;
+		return -1;
+	}
+	
 	int r = 0;
 	// write_eeprom will only write data if sha has changed, so clear sha to make sure that happens
 	dest->sha256[0] = '\0';
@@ -700,7 +725,7 @@ int reload_all_metadata(struct eeprom **max_wc_eeprom)
 int find_good_eeprom(struct eeprom **max_wc_eeprom, struct eeprom **found_eeprom)
 {
 	int i = 0;
-	if (max_wc_eeprom == NULL)
+	if (max_wc_eeprom == NULL || found_eeprom == NULL)
 	{
 		errno = EINVAL;
 		return -1;
@@ -1180,7 +1205,7 @@ int eeprom_manager_remove_key(char *key)
 	if (r != 0)
 		return r;
 	
-	if (is_initialized() == 0)
+	if (is_initialized() == 0 || key == NULL)
 	{
 		errno = EINVAL;
 		return -1;
