@@ -7,40 +7,39 @@ IF("Debug" MATCHES "${CMAKE_BUILD_TYPE}")
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${DEBUG_FLAGS}")
 ENDIF()
 
+# Add libeeprommanager library
+add_library(libeeprommanager SHARED eeprom-manager.c)
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 
-# Specify the files belonging to the DSP algorithm library
-set(SOURCES eeprom-manager.c main.c)
-# add_library(eeprom-manager SHARED ${SOURCES})
-add_executable(eeprom-manager ${SOURCES})
+# Set library version
+set(VERSION_MAJOR "1")
+set(VERSION_MINOR "0")
+set(SO_VERSION ${VERSION_MAJOR})
+set(BUILD_VERSION ${VERSION_MINOR})
+set(VERSION_STRING ${SO_VERSION}.${BUILD_VERSION})
+set_target_properties(libeeprommanager PROPERTIES VERSION ${VERSION_STRING} SOVERSION ${SO_VERSION} )
 
-target_link_libraries(eeprom-manager crypto ssl jansson)
+# Install target for library
+set(LIB_INSTALL "${CMAKE_INSTALL_PREFIX}/lib/")
+set(LIB_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+install(TARGETS libeeprommanager LIBRARY
+       DESTINATION ${LIB_INSTALL}
+       PERMISSIONS ${LIB_PERMISSIONS})
 
-# Define the BUILD, SO Version for library
-# set(VERSION_MAJOR "1")
-# set(VERSION_MINOR "1")
-# set(SO_VERSION ${VERSION_MAJOR})
-# set(BUILD_VERSION ${VERSION_MINOR})
-# set(VERSION_STRING ${SO_VERSION}.${BUILD_VERSION})
+# Install target for header
+set(LIBH_INSTALL "${CMAKE_INSTALL_PREFIX}/include/")
+set(LIBH_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
+install(FILES eeprom-manager.h
+	DESTINATION ${LIBH_INSTALL}
+	PERMISSIONS ${LIBH_PERMISSIONS})
 
-# Set build VERSION and SO_VERSION for target
-#set_target_properties(eeprom-manager PROPERTIES VERSION ${VERSION_STRING} SOVERSION ${SO_VERSION} )
+# Add the eeprom-manager executable
+add_executable(eeprom-manager main.c)
+target_link_libraries(eeprom-manager libeeprommanager crypto ssl jansson)
 
-# Define the install directory for the library, define permisions
-#set(LIB_INSTALL "${CMAKE_INSTALL_PREFIX}/lib/")
-#set(LIB_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
-
-# Install Target
-# By default the link and the library itself will be isntalled
-#install(TARGETS eeprom-manager LIBRARY
-#        DESTINATION ${LIB_INSTALL}
-#        PERMISSIONS ${LIB_PERMISSIONS})
-
-# Define directory for header file install
-#set(LIBH_INSTALL "${CMAKE_INSTALL_PREFIX}/include/")
-#set(LIBH_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
-
-# Install target for library header file
-#install(FILES eeprom-manager.h
-#	DESTINATION ${LIBH_INSTALL}
-#	PERMISSIONS ${LIBH_PERMISSIONS})
+# Install target for eeprom-manager executable
+set(DIR_INSTALL "${CMAKE_INSTALL_PREFIX}/bin/")
+set(EXE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+install(TARGETS eeprom-manager RUNTIME
+        DESTINATION ${DIR_INSTALL}
+        PERMISSIONS ${EXE_PERMISSIONS})

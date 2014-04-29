@@ -13,10 +13,10 @@
 
 // TODO: Support all the JSON types. Currently only supports strings
 // TODO: Need mechanism to remove misbehaving eeprom from pool if it's failing to write and such
+// TODO: Add option to init eeprom manager to operate non-blocking for opening files
+
 // TODO: Check all functions for situations where bad input could cause segfault and handle it.
 // TODO: Make sure no error bubbling will cause a loop to exit when the error can be handled
-// TODO: Add option to init eeprom manager to operate non-blocking for opening files
-// TODO: Split eeprom-manager into lib + util
 
 // Configuration and State Variables
 pthread_mutex_t eeprom_mutex;
