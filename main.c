@@ -6,8 +6,6 @@
 
 #include "eeprom-manager.h"
 
-// TODO: Fix exit values from functions. A lot will be exiting -1 which isn't valid (only have unsigned 8-bit)
-
 int verbosity = 1;
 int bash = 0;
 
@@ -80,7 +78,7 @@ int set_key(char *key, char *value, int no_add)
 		ERROR("Failed to set value in EEPROM: %s\n", strerror(err));
 	else if (r < -1)
 		ERROR("eeprom manager error.\n");
-	return r;
+	return r * -1;
 }
 
 
@@ -105,7 +103,7 @@ int read_key(char *key)
 		ERROR("Failed to read value in EEPROM: %s\n", strerror(err));
 	else if (r < -1)
 		ERROR("eeprom manager error.\n");
-	return r;
+	return r * -1;
 }
 
 
@@ -121,7 +119,7 @@ int remove_key(char *key)
 	if (r == EEPROM_MANAGER_ERROR_KEY_NOT_FOUND)
 		ERROR("Failed to remove key from EEPROM: Key not found\n");
 	
-	return r;
+	return r * -1;
 }
 
 
@@ -142,7 +140,7 @@ int all()
 			break;
 	}
 	eeprom_manager_free_keys(keys);
-	return r;
+	return r * -1;
 }
 
 
@@ -157,7 +155,7 @@ int clear()
 	err = errno;
 	if (r == -1)
 		ERROR("Failed to clear EEPROM: %s\n", strerror(err));
-	return r;
+	return r * -1;
 }
 
 
@@ -190,8 +188,8 @@ int verify()
 			ret = 1;
 			break;
 		default:
-			ERROR("Unknown eeprom-manager error: %d\n", err);
-			ret = 1;
+			ERROR("Unknown eeprom-manager error: %d\n", r);
+			ret = r * -1;
 			break;
 	}
 	return ret;
@@ -217,13 +215,13 @@ int info()
 	if (eeprom_list_start == NULL)
 	{
 		ERROR("Failed to get EEPROM info.\n");
-		return -1;
+		return 1;
 	}
 	
 	INFO("Defined EEPROM devices. All sizes are in Bytes.\n");
 	INFO("%4s\t%10s\t%5s\t%5s\t%" EEPROM_MANAGER_STR(EEPROM_MANAGER_PATH_MAX_LENGTH) "s\n", "#", "Size", "BS", "Count", "Path");
 	for (current_eeprom = eeprom_list_start; current_eeprom != NULL; current_eeprom = current_eeprom->next)
-		printf("%4u\t%10lu\t%5lu\t%5lu\t%" EEPROM_MANAGER_STR(EEPROM_MANAGER_PATH_MAX_LENGTH) "s\n", ++i, (current_eeprom->bs * current_eeprom->count), current_eeprom->bs, current_eeprom->count, current_eeprom->path);
+		printf("%4u\t%10u\t%5u\t%5u\t%" EEPROM_MANAGER_STR(EEPROM_MANAGER_PATH_MAX_LENGTH) "s\n", ++i, (current_eeprom->bs * current_eeprom->count), current_eeprom->bs, current_eeprom->count, current_eeprom->path);
 	
 	return 0;
 }
