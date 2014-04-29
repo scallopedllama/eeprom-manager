@@ -269,29 +269,18 @@ int main(int argc, char **argv)
 			ERROR("Could not open config file at %s\n", EEPROM_MANAGER_CONF_PATH);
 		ret = r;
 	}
-	if (r == EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND)
+	else if (r == EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND)
 	{
-		if (!verbosity)
-			ret = r;
-		else
-		{
-			int c;
-			INFO("No EEPROM devices are initialized. Run Clear (Y/n)? ");
-			c = getchar();
-			if (c == 'y' || c == 'Y' || c == '\n')
-				clear();
-			else
-				ret = r;
-		}
+		INFO("No EEPROM devices are initialized. Re-run with clear command.");
+		ret = r;
 	}
-	
-	if (ret == 0 && strcmp(argv[optind], "set") == 0)
+	else if (strcmp(argv[optind], "set") == 0)
 	{
 		int i;
 		for (i = optind + 1; i < argc; i += 2)
 			ret = set_key(argv[i], argv[i + 1], no_add);
 	}
-	else if (ret == 0)
+	else
 	{
 		if (no_add)
 			WARN("Ignoring argument -n\n");
