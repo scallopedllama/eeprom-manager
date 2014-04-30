@@ -9,6 +9,7 @@ ENDIF()
 
 # Add libeeprommanager library
 add_library(libeeprommanager SHARED eeprom-manager.c)
+target_link_libraries(libeeprommanager crypto ssl jansson)
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 
 # Set library version
@@ -35,7 +36,7 @@ install(FILES eeprom-manager.h
 
 # Add the eeprom-manager executable
 add_executable(eeprom-manager main.c)
-target_link_libraries(eeprom-manager libeeprommanager crypto ssl jansson)
+target_link_libraries(eeprom-manager libeeprommanager)
 
 # Install target for eeprom-manager executable
 set(DIR_INSTALL "${CMAKE_INSTALL_PREFIX}/bin/")
