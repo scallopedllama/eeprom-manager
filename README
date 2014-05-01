@@ -1,1 +1,62 @@
-A tool for managing data stored inside of EEPROM(s).
+EEPROM Manager
+A tool for managing settings stored on EEPROM devices.
+(c)2014 Joe Balough
+jbb5044@gmail.com
+
+EEPROM Manager is a library + utility that can be used to manage settings
+stored on one or many EEPROM devices from linux. It stores your settings
+as key, value pairs in a JSON object on the device(s). This causes the devices
+to be human-readable in the even the data becomes corrupt. If configured
+with more than one EEPROM device, EEPROM Manager will automatically save
+all settings across all devices as redundant storage. To suppor this, the
+last block of each device is reserved for a magic string, SHA256 sum of its
+contents, and a write count. On initialization, EEPROM Manager will scan
+each device and build a list of devices with the highest write count,
+then use the first such device with a SHA256 that matches its data.
+If bad devices are found, they are automatically brought into sync with
+the found good device.
+
+EEPROM Manager uses Jansson for moving data to-from JSON. The library
+should be thread safe and multi-process safe. Thread safety is guaranteed
+by using a pthread_mutex to protect all API calls. Multi-process safety
+is provided by obtaining advisory file locks on the EEPROM devices
+before reading or writing.
+
+See eeprom-manager.h for API Documentation.
+
+
+
+EEPROM Manager is built using cmake:
+	cmake CMakeLists.txt
+	make
+	make install
+
+All written data is immediately verified by reading it back out of the device
+and comparing it to the written data. To disable this, add the define
+EEPROM_MANAGER_NO_VERIFY_WRITE.
+
+
+
+EEPROM Manager is configured using a simple text file at /etc/eeprom-manager.conf
+with the following format:
+/path/to/EEPROM/device block-size(B) total-size(B)
+On a system with a 1Mb EEPROM split into two devices, it looks like this:
+/sys/bus/i2c/devices/1-0040/eeprom 128 65536
+/sys/bus/i2c/devices/1-0041/eeprom 128 65536
+The value used for block-size should be obtained by the kernel driver.
+Check dmesg for a line like this:
+at24 1-0040: 65536 byte 24c1024 EEPROM, writable, 128 bytes/write
+The block size is the value indicated in bytes/write.
+
+
+
+To integrate into OE, copy eeprom-manager.bb into your layer and create
+a eeprom-manager folder in the same folder. Copy your eeprom-manager.conf
+file into that folder and you should be golden.
+
+
+
+Features left to implement before v1.0:
+ * Support for all JSON types. Currently only supports strings.
+ * Support for removing misbehaving EEPROMS from the device pool.
+
