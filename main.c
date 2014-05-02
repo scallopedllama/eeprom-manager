@@ -69,7 +69,7 @@ int set_key(char *key, char *value, int no_add)
 	if (r >= 0)
 	{
 		if (bash)
-			INFO("%s=%s\n", key, value);
+			INFO("%s=\"%s\"\n", key, value);
 		else
 			INFO("%s\n", value);
 	}
@@ -94,7 +94,7 @@ int read_key(char *key)
 	if (r >= 0)
 	{
 		if (bash)
-			INFO("%s=%s\n", key, value);
+			INFO("%s=\"%s\"\n", key, value);
 		else
 			printf("%s\n", value);
 	}
