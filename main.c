@@ -52,7 +52,8 @@ void usage(char *name)
 	                "Manages JSON-encoded non-volatile data stored in EEPROM(s).\n\n"
 	                "\n"
 	                "Operations:\n"
-	                "\tread (key)              - Read value from key in EEPROM\n"
+	                "\tread (key) ...          - Read value from key in EEPROM\n"
+	                "\t                          Read multiple values by repeating (key) (key)...\n"
 	                "\tset  (key) (value) ...  - Set value(s) to key(s) in EEPROM\n"
 	                "\t                          Set multiple values by repeating (key) (value) (key) (value)...\n"
 	                "\tall                     - Print all defined keys\n"
@@ -309,7 +310,11 @@ int main(int argc, char **argv)
 			WARN("Ignoring argument -n\n");
 		
 		if (strcmp(argv[optind], "read") == 0)
-			ret = read_key(argv[optind + 1]);
+		{
+			int i;
+			for (i = optind + 1; i < argc; i += 1)
+				ret = read_key(argv[i]);
+		}
 		else if (strcmp(argv[optind], "remove") == 0)
 			ret = remove_key(argv[optind + 1]);
 		else if (strcmp(argv[optind], "all") == 0)
