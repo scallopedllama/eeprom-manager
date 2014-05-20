@@ -288,12 +288,12 @@ int main(int argc, char **argv)
 			ERROR("Could not open config file at %s\n", EEPROM_MANAGER_CONF_PATH);
 		ret = r;
 	}
-	else if (r == EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND)
+	else if ((r == EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND) && (strcmp(argv[optind], "clear") != 0))
 	{
-		INFO("No EEPROM devices are initialized. Re-run with clear command.");
+		INFO("No EEPROM devices are initialized. Re-run with clear command.\n");
 		ret = r;
 	}
-	else if (r < -1)
+	else if ((r < -1) && (r != EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND))
 	{
 		ERROR("EEPROM Manager error: %s\n", eeprom_manager_decode_error(r));
 		ret = r;
