@@ -34,28 +34,28 @@
 #define EEPROM_MANAGER_CONF_PATH         "/etc/eeprom-manager.conf"
 
 #define EEPROM_MANAGER_SET_NO_CREATE (1 << 0)
-#define eeprom_manager_errors X(EEPROM_MANAGER_SUCCESS,                        "Success")                                   \
-                              X(EEPROM_MANAGER_ERROR_ERRNO,                    "Check Errno")                               \
-                              X(EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND,    "No good devices found")                     \
-                              X(EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC,       "Metadata has bad magic")                    \
-                              X(EEPROM_MANAGER_ERROR_CHECKSUM_FAILED,          "Device checksum does not match")            \
-                              X(EEPROM_MANAGER_ERROR_JSON_PARSE_FAIL,          "Failed to parse JSON")                      \
-                              X(EEPROM_MANAGER_ERROR_JSON_ROOT_NOT_OBJECT,     "JSON Root is not an object")                \
-                              X(EEPROM_MANAGER_ERROR_JANSSON_ERROR,            "Jansson error")                             \
-                              X(EEPROM_MANAGER_ERROR_JSON_KEY_NOT_FOUND,       "JSON key not found")                        \
-                              X(EEPROM_MANAGER_ERROR_JSON_KEY_NOT_STRING,      "JSON value not a string")                   \
-                              X(EEPROM_MANAGER_ERROR_WRITE_JSON_TOO_LONG,      "JSON string will not fit in EEPROM")        \
-                              X(EEPROM_MANAGER_ERROR_WRITE_VERIFY_FAILED,      "Written data did not match read back data")
+#define eeprom_manager_errors X( 0, EEPROM_MANAGER_SUCCESS,                        "Success")                                   \
+                              X( -1, EEPROM_MANAGER_ERROR_ERRNO,                    "Check Errno")                               \
+                              X( -2, EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND,    "No good devices found")                     \
+                              X( -3, EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC,       "Metadata has bad magic")                    \
+                              X( -4, EEPROM_MANAGER_ERROR_CHECKSUM_FAILED,          "Device checksum does not match")            \
+                              X( -5, EEPROM_MANAGER_ERROR_JSON_PARSE_FAIL,          "Failed to parse JSON")                      \
+                              X( -6, EEPROM_MANAGER_ERROR_JSON_ROOT_NOT_OBJECT,     "JSON Root is not an object")                \
+                              X( -7, EEPROM_MANAGER_ERROR_JANSSON_ERROR,            "Jansson error")                             \
+                              X( -8, EEPROM_MANAGER_ERROR_JSON_KEY_NOT_FOUND,       "JSON key not found")                        \
+                              X( -9, EEPROM_MANAGER_ERROR_JSON_KEY_NOT_STRING,      "JSON value not a string")                   \
+                              X(-10, EEPROM_MANAGER_ERROR_WRITE_JSON_TOO_LONG,      "JSON string will not fit in EEPROM")        \
+                              X(-11, EEPROM_MANAGER_ERROR_WRITE_VERIFY_FAILED,      "Written data did not match read back data")
 
 // ERRORS
 enum EEPROM_MANAGER_ERROR
 {
-#define X(a, b) a,
+#define X(a, b, c) b = a,
 	eeprom_manager_errors
 #undef X
 };
 const char *EEPROM_MANAGER_ERROR_STRINGS[] = {
-#define X(a, b) b,
+#define X(a, b, c) c,
 	eeprom_manager_errors
 #undef X
 };

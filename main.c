@@ -96,7 +96,7 @@ int set_key(char *key, char *value, int no_add)
 		ERROR("Failed to set value in EEPROM: %s\n", strerror(err));
 	else if (r < -1)
 		ERROR("EEPROM Manager error: %s\n", eeprom_manager_decode_error(r));
-	return r * -1;
+	return r;
 }
 
 
@@ -121,7 +121,7 @@ int read_key(char *key)
 		ERROR("Failed to read value in EEPROM: %s\n", strerror(err));
 	else if (r < -1)
 		ERROR("EEPROM Manager error: %s\n", eeprom_manager_decode_error(r));
-	return r * -1;
+	return r;
 }
 
 
@@ -137,7 +137,7 @@ int remove_key(char *key)
 	else if (r < -1)
 		ERROR("EEPROM Manager error: %s\n", eeprom_manager_decode_error(r));
 	
-	return r * -1;
+	return r;
 }
 
 
@@ -158,7 +158,7 @@ int all()
 			break;
 	}
 	eeprom_manager_free_keys(keys);
-	return r * -1;
+	return r;
 }
 
 
@@ -175,7 +175,7 @@ int clear()
 		ERROR("Failed to clear EEPROM: %s\n", strerror(err));
 	else if (r < -1)
 		ERROR("EEPROM Manager error: %s\n", eeprom_manager_decode_error(r));
-	return r * -1;
+	return r;
 }
 
 
@@ -209,7 +209,7 @@ int verify()
 			break;
 		default:
 			ERROR("EEPROM Manager error: %s\n", eeprom_manager_decode_error(r));
-			ret = r * -1;
+			ret = r;
 			break;
 	}
 	return ret;

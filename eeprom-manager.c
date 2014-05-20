@@ -252,7 +252,7 @@ ssize_t read_write_all(struct eeprom *device, char op, char *buf, size_t count)
 		read_write_all(device, 'r', read_data, count);
 		
 		if (strncmp(buf, read_data, count) != 0)
-			return -1 * EEPROM_MANAGER_ERROR_WRITE_VERIFY_FAILED;
+			return EEPROM_MANAGER_ERROR_WRITE_VERIFY_FAILED;
 	}
 #endif
 	
@@ -296,7 +296,7 @@ int read_write_eeprom_metadata(struct eeprom *device, char op)
 		if (r < 0)
 			return r;
 		if (strncmp(magic_buffer, EEPROM_MANAGER_MAGIC, strlen(EEPROM_MANAGER_MAGIC) + 1) != 0)
-			return -1 * EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC;
+			return EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC;
 		ret += r;
 	}
 	else
@@ -537,7 +537,7 @@ int verify_eeprom(struct eeprom *device)
 	{
 		// Don't keep invalid data around
 		free_eeprom_data(device);
-		return -1 * EEPROM_MANAGER_ERROR_CHECKSUM_FAILED;
+		return EEPROM_MANAGER_ERROR_CHECKSUM_FAILED;
 	}
 	return 0;
 }
@@ -697,7 +697,7 @@ int reload_all_metadata(struct eeprom **max_wc_eeprom)
 	{
 		// Load metadata for this eeprom
 		r = read_write_eeprom_metadata(d, 'r');
-		if (r == -1 * EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC)
+		if (r == EEPROM_MANAGER_ERROR_METADATA_BAD_MAGIC)
 			continue;
 		else if (r < 0)
 			return r;
@@ -723,7 +723,7 @@ int reload_all_metadata(struct eeprom **max_wc_eeprom)
 	}
 	
 	if (max_wc_eeprom[0] == NULL)
-		return -1 * EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND;
+		return EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND;
 	return 0;
 }
 
@@ -764,7 +764,7 @@ int find_good_eeprom(struct eeprom **max_wc_eeprom, struct eeprom **found_eeprom
 	
 	// Return that there was no good eeproms found
 	if (*found_eeprom == NULL)
-		return -1 * EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND;
+		return EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND;
 	return 0;
 }
 
@@ -887,11 +887,11 @@ int common_json_prep()
 	{
 		json_root = json_loads(good_eeprom->data, 0, &json_error);
 		if (json_root == NULL)
-			return -1 * EEPROM_MANAGER_ERROR_JSON_PARSE_FAIL;
+			return EEPROM_MANAGER_ERROR_JSON_PARSE_FAIL;
 		if (!json_is_object(json_root))
 		{
 			json_decref(json_root);
-			return -1 * EEPROM_MANAGER_ERROR_JSON_ROOT_NOT_OBJECT;
+			return EEPROM_MANAGER_ERROR_JSON_ROOT_NOT_OBJECT;
 		}
 	}
 	return 0;
@@ -920,11 +920,11 @@ int write_json_to_eeprom()
 	// NOTE: json_dump_data MUST be freed
 	json_dump_data = json_dumps(json_root, JSON_COMPACT);
 	if (json_dump_data == NULL)
-		return -1 * EEPROM_MANAGER_ERROR_JANSSON_ERROR;
+		return EEPROM_MANAGER_ERROR_JANSSON_ERROR;
 	
 	// Make sure the dumped data fits into the devices
 	if (strlen(json_dump_data) + 1 > eeprom_data_size)
-		return -1 * EEPROM_MANAGER_ERROR_WRITE_JSON_TOO_LONG;
+		return EEPROM_MANAGER_ERROR_WRITE_JSON_TOO_LONG;
 	
 	// Copy the obtained string into the eeprom structure then free it.
 	strncpy(good_eeprom->data, json_dump_data, eeprom_data_size);
@@ -1062,19 +1062,19 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 	
 	// Make sure key exists if NO_CREATE is set
 	if ((flags & EEPROM_MANAGER_SET_NO_CREATE) && (json_object_get(json_root, key) == NULL))
-		return -1 * EEPROM_MANAGER_ERROR_JSON_KEY_NOT_FOUND;
+		return EEPROM_MANAGER_ERROR_JSON_KEY_NOT_FOUND;
 	
 	// Make the value string
 	json_value = json_string(value);
 	if (json_value == NULL)
-		return -1 * EEPROM_MANAGER_ERROR_JANSSON_ERROR;
+		return EEPROM_MANAGER_ERROR_JANSSON_ERROR;
 	
 	// Set it
 	r = json_object_set(json_root, key, json_value);
 	if (r < 0)
 	{
 		json_decref(json_value);
-		return -1 * EEPROM_MANAGER_ERROR_JANSSON_ERROR;
+		return EEPROM_MANAGER_ERROR_JANSSON_ERROR;
 	}
 	
 	// Write new JSON data to eeproms
@@ -1124,9 +1124,9 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 	// Get the value
 	json_value = json_object_get(json_root, key);
 	if (json_value == NULL)
-		return -1 * EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND;
+		return EEPROM_MANAGER_ERROR_JSON_KEY_NOT_FOUND;
 	if (!json_is_string(json_value))
-		return -1 * EEPROM_MANAGER_ERROR_JSON_KEY_NOT_STRING;
+		return EEPROM_MANAGER_ERROR_JSON_KEY_NOT_STRING;
 	
 	// Copy the value into the return variable
 	// NOTE: json_txt_value is read-only and MUST NOT be freed
@@ -1234,7 +1234,7 @@ int eeprom_manager_remove_key(char *key)
 	// Remove the key
 	r = json_object_del(json_root, key);
 	if (r < 0)
-		return -1 * EEPROM_MANAGER_ERROR_JSON_KEY_NOT_FOUND;
+		return EEPROM_MANAGER_ERROR_JSON_KEY_NOT_FOUND;
 	
 	// Write new JSON data to eeproms
 	r = write_json_to_eeprom();
@@ -1316,7 +1316,7 @@ int eeprom_manager_verify()
 	
 	// Reload metadata
 	r = reload_all_metadata(max_wc_eeprom);
-	if (r == -1 * EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND)
+	if (r == EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND)
 		return 0;
 	else if (r < 0)
 		return r;
@@ -1333,7 +1333,7 @@ int eeprom_manager_verify()
 			continue;
 		
 		t = verify_eeprom(d);
-		if (t == -1 * EEPROM_MANAGER_ERROR_CHECKSUM_FAILED)
+		if (t == EEPROM_MANAGER_ERROR_CHECKSUM_FAILED)
 		{
 			t = clone_eeproms(good_eeprom, d);
 			ret = 2;
