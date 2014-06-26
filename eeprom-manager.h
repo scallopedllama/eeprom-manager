@@ -19,6 +19,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <openssl/sha.h>
 
 #define EEPROM_MANAGER_STR(s)            EEPROM_MANAGER_XSTR(s)
@@ -250,5 +254,9 @@ inline const char * eeprom_manager_decode_error(int error)
 	if (error < 0) error *= -1;
 	return EEPROM_MANAGER_ERROR_STRINGS[error];
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
