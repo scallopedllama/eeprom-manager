@@ -1051,6 +1051,7 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 	
 	if (is_initialized() == 0 || key == NULL || value == NULL)
 	{
+		pthread_mutex_unlock(&eeprom_mutex);
 		errno = EINVAL;
 		return -1;
 	}
@@ -1058,22 +1059,36 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 	// Do common JSON Preparation (opens eeproms, checks for data changes, populates json_root)
 	r = common_json_prep();
 	if (r < 0)
+	{
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return r;
+	}
 	
 	// Make sure key exists if NO_CREATE is set
 	if ((flags & EEPROM_MANAGER_SET_NO_CREATE) && (json_object_get(json_root, key) == NULL))
+	{
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return EEPROM_MANAGER_ERROR_JSON_KEY_NOT_FOUND;
+	}
 	
 	// Make the value string
 	json_value = json_string(value);
 	if (json_value == NULL)
+	{
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return EEPROM_MANAGER_ERROR_JANSSON_ERROR;
+	}
 	
 	// Set it
 	r = json_object_set(json_root, key, json_value);
 	if (r < 0)
 	{
 		json_decref(json_value);
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return EEPROM_MANAGER_ERROR_JANSSON_ERROR;
 	}
 	
@@ -1082,6 +1097,8 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 	if (r < 0)
 	{
 		json_decref(json_value);
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return r;
 	}
 	
@@ -1091,7 +1108,10 @@ int eeprom_manager_set_value(char *key, char *value, int flags)
 	// Clean up files and release locks
 	r = close_eeproms();
 	if (r < 0)
+	{
+		pthread_mutex_unlock(&eeprom_mutex);
 		return r;
+	}
 	
 	r = pthread_mutex_unlock(&eeprom_mutex);
 	if (r != 0)
@@ -1113,20 +1133,33 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 	if (is_initialized() == 0 || key == NULL || value == NULL)
 	{
 		errno = EINVAL;
+		pthread_mutex_unlock(&eeprom_mutex);
 		return -1;
 	}
 	
 	// Do common JSON Preparation (opens eeproms, checks for data changes, populates json_root)
 	r = common_json_prep();
 	if (r < 0)
+	{
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return r;
+	}
 	
 	// Get the value
 	json_value = json_object_get(json_root, key);
 	if (json_value == NULL)
+	{
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return EEPROM_MANAGER_ERROR_JSON_KEY_NOT_FOUND;
+	}
 	if (!json_is_string(json_value))
+	{
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return EEPROM_MANAGER_ERROR_JSON_KEY_NOT_STRING;
+	}
 	
 	// Copy the value into the return variable
 	// NOTE: json_txt_value is read-only and MUST NOT be freed
@@ -1136,7 +1169,10 @@ int eeprom_manager_read_value(char *key, char *value, int length)
 	// Clean up files and release locks
 	r = close_eeproms();
 	if (r < 0)
+	{
+		pthread_mutex_unlock(&eeprom_mutex);
 		return r;
+	}
 	
 	r = pthread_mutex_unlock(&eeprom_mutex);
 	if (r != 0)
@@ -1160,6 +1196,7 @@ char **eeprom_manager_get_keys()
 	
 	if (is_initialized() == 0)
 	{
+		pthread_mutex_unlock(&eeprom_mutex);
 		errno = EINVAL;
 		return NULL;
 	}
@@ -1167,13 +1204,21 @@ char **eeprom_manager_get_keys()
 	// Do common JSON Preparation (opens eeproms, checks for data changes, populates json_root)
 	r = common_json_prep();
 	if (r < 0)
+	{
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return NULL;
+	}
 	
 	// Get number of keys and allocate pointers for them
 	no_keys = json_object_size(json_root);
 	ret = malloc(sizeof(char*) * (no_keys + 1));
 	if (ret == NULL)
+	{
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return ret;
+	}
 	memset(ret, 0, sizeof(char*) * (no_keys + 1));
 	
 	// Allocate strings and assign pointers correctly
@@ -1188,7 +1233,10 @@ char **eeprom_manager_get_keys()
 	// Clean up files and release locks
 	r = close_eeproms();
 	if (r < 0)
+	{
+		pthread_mutex_unlock(&eeprom_mutex);
 		return NULL;
+	}
 	
 	r = pthread_mutex_unlock(&eeprom_mutex);
 	if (r != 0)
@@ -1222,6 +1270,7 @@ int eeprom_manager_remove_key(char *key)
 	
 	if (is_initialized() == 0 || key == NULL)
 	{
+		pthread_mutex_unlock(&eeprom_mutex);
 		errno = EINVAL;
 		return -1;
 	}
@@ -1229,22 +1278,37 @@ int eeprom_manager_remove_key(char *key)
 	// Do common JSON Preparation (opens eeproms, checks for data changes, populates json_root)
 	r = common_json_prep();
 	if (r < 0)
+	{
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return r;
+	}
 	
 	// Remove the key
 	r = json_object_del(json_root, key);
 	if (r < 0)
+	{
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return EEPROM_MANAGER_ERROR_JSON_KEY_NOT_FOUND;
+	}
 	
 	// Write new JSON data to eeproms
 	r = write_json_to_eeprom();
 	if (r < 0)
+	{
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return r;
+	}
 	
 	// Clean up files and release locks
 	r = close_eeproms();
 	if (r < 0)
+	{
+		pthread_mutex_unlock(&eeprom_mutex);
 		return r;
+	}
 	
 	r = pthread_mutex_unlock(&eeprom_mutex);
 	if (r != 0)
@@ -1264,18 +1328,27 @@ int eeprom_manager_clear()
 	
 	if (is_initialized() == 0)
 	{
+		pthread_mutex_unlock(&eeprom_mutex);
 		errno = EINVAL;
 		return -1;
 	}
 	
 	r = open_eeproms();
 	if (r < 0)
+	{
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return r;
+	}
 	
 	// Write an empty JSON structure into good_eeprom, and populate that through
 	r = malloc_eeprom_data(first_eeprom);
 	if (r < 0)
+	{
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return r;
+	}
 	strncpy(first_eeprom->data, "{}", eeprom_data_size);
 	write_r = write_all_eeproms(first_eeprom);
 	
@@ -1283,9 +1356,15 @@ int eeprom_manager_clear()
 	
 	r = close_eeproms();
 	if (r < 0)
+	{
+		pthread_mutex_unlock(&eeprom_mutex);
 		return r;
+	}
 	if (write_r < 0)
+	{
+		pthread_mutex_unlock(&eeprom_mutex);
 		return write_r;
+	}
 	
 	r = pthread_mutex_unlock(&eeprom_mutex);
 	if (r != 0)
@@ -1306,25 +1385,42 @@ int eeprom_manager_verify()
 	
 	if (is_initialized() == 0)
 	{
+		pthread_mutex_unlock(&eeprom_mutex);
 		errno = EINVAL;
 		return -1;
 	}
 	
 	r = open_eeproms();
 	if (r < 0)
+	{
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return r;
+	}
 	
 	// Reload metadata
 	r = reload_all_metadata(max_wc_eeprom);
 	if (r == EEPROM_MANAGER_ERROR_NO_GOOD_DEVICES_FOUND)
+	{
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return 0;
+	}
 	else if (r < 0)
+	{
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return r;
+	}
 	
 	// Find the good eeprom
 	r = find_good_eeprom(max_wc_eeprom, &good_eeprom);
 	if (r < 0)
+	{
+		close_eeproms();
+		pthread_mutex_unlock(&eeprom_mutex);
 		return r;
+	}
 	
 	for (d = first_eeprom; d != NULL; d = d->next)
 	{
@@ -1339,7 +1435,11 @@ int eeprom_manager_verify()
 			ret = 2;
 		}
 		else if (t < 0)
+		{
+			close_eeproms();
+			pthread_mutex_unlock(&eeprom_mutex);
 			return t;
+		}
 		
 		// Free all data allocated except for good_eeprom
 		free_eeprom_data(d);
@@ -1347,7 +1447,10 @@ int eeprom_manager_verify()
 	
 	r = close_eeproms();
 	if (r < 0)
+	{
+		pthread_mutex_unlock(&eeprom_mutex);
 		return r;
+	}
 	
 	r = pthread_mutex_unlock(&eeprom_mutex);
 	if (r != 0)
@@ -1362,6 +1465,7 @@ struct eeprom *eeprom_manager_info()
 	pthread_mutex_lock(&eeprom_mutex);
 	if (is_initialized() == 0)
 	{
+		pthread_mutex_unlock(&eeprom_mutex);
 		errno = EINVAL;
 		return NULL;
 	}
