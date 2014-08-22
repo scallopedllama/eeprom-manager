@@ -1,0 +1,7 @@
+The following features would be nice to have in EEPROM Manager
+
+* Add support for other JSON types: int, float, bool, null (?), object (probably not), array (probably not)
+* Detect and remove misbehaving EEPROMs from pool
+* Tests
+* Non-Blocking Mode
+* Mode of operation that prevents excessive reading and writing to EEPROM. Manager in separate process? EEPROM Contents backed on ramdisk?
