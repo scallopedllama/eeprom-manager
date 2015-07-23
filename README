@@ -6,11 +6,13 @@ jbb5044@gmail.com
 EEPROM Manager is a library + utility that can be used to manage settings
 stored on one or many EEPROM devices from linux. It stores your settings
 as key, value pairs in a JSON object on the device(s). This causes the devices
-to be human-readable in the even the data becomes corrupt. If configured
+to be human-readable in the event the data becomes corrupt. If configured
 with more than one EEPROM device, EEPROM Manager will automatically save
-all settings across all devices as redundant storage. To suppor this, the
-last block of each device is reserved for a magic string, SHA256 sum of its
-contents, and a write count. On initialization, EEPROM Manager will scan
+all settings across all devices as redundant storage. To support this, the
+last block of each device is reserved for a magic string (6B + null),
+hexadecimal representation of the SHA256 sum of its contents (64B + null),
+and an ASCII string representation of the write count (10B + null).
+On initialization, EEPROM Manager will scan
 each device and build a list of devices with the highest write count,
 then use the first such device with a SHA256 that matches its data.
 If bad devices are found, they are automatically brought into sync with
@@ -59,4 +61,5 @@ file into that folder and you should be golden.
 Features left to implement before v1.0:
  * Support for all JSON types. Currently only supports strings.
  * Support for removing misbehaving EEPROMS from the device pool.
+
 
